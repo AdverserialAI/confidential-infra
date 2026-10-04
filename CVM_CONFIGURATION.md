@@ -70,6 +70,11 @@ for meter delivery.
 Store these in Phala/dstack sealed environment configuration, never Git,
 Hugging Face, a Docker image, or an ordinary shell history:
 
+Phala replaces the sealed environment as a complete set and restarts the CVM
+when it applies an environment update. Assemble and review the complete file
+first; do not use `phala envs update` for an incremental secret change on a
+running inference service.
+
 | Value | Purpose |
 | --- | --- |
 | `SGLANG_LOOPBACK_TOKEN` | random credential used only proxy → loopback SGLang; it is the value passed to SGLang `--api-key` |
