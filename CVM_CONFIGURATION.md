@@ -53,6 +53,7 @@ Create two external volumes before rendering compose:
 | --- | --- | --- | --- |
 | configured `MODEL_WEIGHTS_VOLUME` | model runtime user read-only | SGLang `/data` | model artifact only |
 | `proxy-state` | UID/GID `65532:65532`, mode `0700` | proxy/collector `/state` | certificates, one-use entitlement IDs, meter outbox, GPU evidence |
+| configured `METER_CLIENT_TLS_VOLUME` | UID/GID `65532:65532`, mode `0700` | proxy `/run/secrets/meter-tls` (read-only) | CVM meter client leaf certificate/key and meter-ingress CA only |
 
 The model volume must never be mounted into the proxy or evidence collector.
 Expose only TCP 443 to `attest-proxy`. SGLang is `127.0.0.1:30000` in the
@@ -62,8 +63,9 @@ credential. There is no public SGLang port.
 At DNS, `cc-api.adverserial.ai` must use L4/SNI pass-through to the CVM. Do not
 terminate TLS at Heroku, Cloudflare, Gandi, a load balancer, or a GPU proxy.
 The CVM needs outbound access only to the selected ACME CA/DNS API, the
-container registry, the NVIDIA evidence service, and `billing.adverserial.ai`
-for meter delivery.
+container registry, the NVIDIA evidence service, the immutable policy/source sites, and the dedicated
+`meter-ingress.adverserial.ai` endpoint for count-only meter delivery. It does
+not directly call `billing.adverserial.ai` from the CVM.
 
 ## 3. Sealed CVM environment values
 
@@ -83,6 +85,8 @@ running inference service.
 | `ACME_EMAIL` | ACME incident/expiry contact |
 | `ENTITLEMENT_JWKS_JSON` | billing entitlement **public** JWK set, still sealed to keep the render self-contained |
 | `NV_ATTESTATION_SERVICE_KEY` | NVIDIA remote-attestation service key used only by the collector; it must not be visible to proxy or SGLang |
+| `METER_URL` | exact external mTLS ingress origin, e.g. `https://meter-ingress.adverserial.ai`; never the Heroku billing origin |
+| `METER_CLIENT_TLS_VOLUME` | name of the external CVM-only volume containing `client.crt`, `client.key`, and `ingress-ca.crt`; its contents are not environment variables and must never be committed |
 
 Generate the two local trust-boundary key pairs once, on an administrator
 workstation, without printing them:
@@ -127,20 +131,45 @@ confidential prompt, deploy that change in a staged billing release and set:
 - `CC_ENTITLEMENT_KEY_ID`: the corresponding stable public-key ID.
 - `CC_METER_JWKS_JSON`: public JWK for the CVM meter signer derived from
   `METER_SIGNING_SEED`.
+- `CC_METER_INGRESS_SHARED_SECRET`: a new high-entropy shared secret held
+  only by billing and `confidential-meter-ingress`. Billing rejects direct
+  `/cc/meter` requests without the ingress header before parsing an event.
 - `CC_ALLOWED_MODELS=lordx64/cyberglm` for the first rollout.
 - `CC_ENTITLEMENT_AUDIENCE=https://cc-api.adverserial.ai` and
   `CC_METER_ISSUER=https://cc-api.adverserial.ai`.
 
+Deploy [`AdverserialAI/confidential-meter-ingress`](https://github.com/AdverserialAI/confidential-meter-ingress)
+outside the CVM, at `meter-ingress.adverserial.ai`, before configuring the CVM.
+It must have a true L4/TCP pass-through edge so its Go process terminates TLS
+and validates the dedicated CVM client certificate itself. Give it a fixed
+HTTPS upstream of `https://billing.adverserial.ai/cc/meter`, its server
+certificate/key, the client CA public certificate, the expected client SPKI
+fingerprint, and the same `CC_METER_INGRESS_SHARED_SECRET`.
+
+Generate dedicated material on an administrator workstation; the script never
+prints a private key and writes files with mode `0600`:
+
+```bash
+python3 -m pip install cryptography
+python3 scripts/generate-meter-mtls-material.py \
+  --ingress-hostname meter-ingress.adverserial.ai \
+  --cvm-out "$HOME/.config/adverserial/cc-meter-cvm" \
+  --ingress-out "$HOME/.config/adverserial/cc-meter-ingress"
+```
+
+Upload only `client.crt`, `client.key`, and `ingress-ca.crt` from the CVM
+output to the sealed external `METER_CLIENT_TLS_VOLUME`; configure the ingress
+with its separate server files and `client-ca.crt`. Use the emitted
+`EXPECTED_CLIENT_SPKI_SHA256` at the ingress. Never put the CVM client key in
+billing, the ingress host, an image, or an environment variable.
+
 Billing returns a five-minute, single-use, model-scoped entitlement after it
 reserves bounded usage. The raw customer API key terminates at billing. The
-CVM receives only the entitlement. After inference, it writes a signed,
-count-only meter event durably, then POSTs it to billing. Billing verifies the
-signature and settles the reservation idempotently.
-
-Current billing on Heroku accepts this signed meter event over HTTPS. It does
-not authenticate a TLS client certificate. Add enforced mTLS only when billing
-has an ingress that actually validates the proxy client certificate; do not
-claim mTLS before then.
+CVM receives only the entitlement. After inference it durably writes a signed,
+count-only meter event, then sends it over TLS 1.3 with its client certificate
+to the ingress. The ingress forwards the unchanged envelope over its fixed
+HTTPS billing connection. Billing verifies both the ingress secret and the
+proxy's Ed25519 signature, then settles the reservation idempotently.
 
 ## 5. Evidence, policy, and client activation
 
