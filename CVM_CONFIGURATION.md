@@ -26,10 +26,10 @@ immutable GHCR image digests (proxy and GPU-evidence collector), their GitHub
 build provenance, and SBOM. Put those exact digests in the profile; never use
 a mutable image tag. Publish the matching source release first.
 
-The current `v0.1.0-rc.5` release is pinned in the H200 profile:
+The current `v0.1.0-rc.7` release is pinned in the H200 profile:
 
-- proxy: `ghcr.io/adverserialai/attest-proxy@sha256:0ca9b1d793105ee5d9885990a4b2d4da37134c1ba1a5cf216a8ff429b027e5f5`
-- collector: `ghcr.io/adverserialai/gpu-evidence-collector@sha256:6fd6f49726d8ba234f07d03f4222afb86112a8f3092d5e9818b423179f863d22`
+- proxy: `ghcr.io/adverserialai/attest-proxy@sha256:f2f9f6dff2f68405d2db3f115764a9a6d59f18dd916bf30a93c8a882d4df4de8`
+- collector: `ghcr.io/adverserialai/gpu-evidence-collector@sha256:7b2853811da6acb40b3f06903571fb1e32e56a1e869de0ee1989303a3493cf39`
 
 Both were built from the public tag with GitHub provenance and SBOMs. The initial GHCR release-candidate images are private packages. Before any
 CVM compose pull, authenticate the CVM Docker runtime to `ghcr.io` with a
