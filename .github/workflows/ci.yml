@@ -1,0 +1,10 @@
+name: Validate templates
+on: [push, pull_request]
+permissions: {contents: read}
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: grep -R --line-number 'set -x' . && exit 1 || true
+      - run: grep -R --line-number 'image: .*:latest' docker-compose.yml && exit 1 || true

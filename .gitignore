@@ -1,0 +1,9 @@
+.DS_Store
+dist/
+chat-dist/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt

@@ -1,0 +1,120 @@
+# CyberGLM confidential deployment — Phala 8×H200 CVM (gpu-tee-cwpu7)
+#
+# Services:
+#   sglang        — the inference engine, LOOPBACK ONLY (never public)
+#   attest-proxy  — the only public process: in-enclave TLS (ACME DNS-01 via
+#                   Gandi), /attestation with fresh nonce-bound TDX quote +
+#                   receipts + cached NVIDIA NRAS GPU evidence, /v1/models
+#                   badge-meta injection, billing auth gate + counts-only
+#                   usage tap, and the GPU evidence collector sidecar (inline,
+#                   refreshes /data/gpu-evidence.json every 5 min)
+#   chat          — the static cc-chat bundle (feature/confidential-verification
+#                   build), served by the proxy as a separate virtual host
+#
+# Secrets arrive as dstack sealed envs (phala deploy -e ...):
+#   GANDI_PAT, BILLING_WRITER_SECRET, SGLANG_API_KEY is retired — the proxy
+#   fronts auth itself via billing.
+#
+# The proxy source and the GPU collector are embedded at deploy time
+# (PROXY_SRC_B64 = gzip+base64 tar; COLLECTOR_SRC_B64 = base64 .py) until the
+# signed release pipeline exists — the compose hash then binds the exact
+# sources. Build locally with scripts/build-compose.sh.
+services:
+  sglang:
+    image: lmsysorg/sglang:latest
+    shm_size: 32gb
+    restart: on-failure
+    volumes:
+      - cyberglm-data:/data
+    command: >
+      python -m sglang.launch_server
+      --model-path /data/cyberglm-fp8
+      --served-model-name lordx64/cyberglm
+      --host 127.0.0.1
+      --port 30000
+      --tp 8
+      --trust-remote-code
+      --kv-cache-dtype fp8_e4m3
+      --dsa-prefill-backend flashmla_sparse_q8
+      --dsa-decode-backend flashmla_kv
+      --speculative-algorithm EAGLE
+      --speculative-num-steps 5
+      --speculative-eagle-topk 1
+      --speculative-num-draft-tokens 6
+      --mem-fraction-static 0.8
+      --context-length 1048576
+      --reasoning-parser glm45
+      --tool-call-parser glm47
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 8
+              capabilities: [gpu]
+
+  attest-proxy:
+    image: golang:1.23-bookworm
+    restart: on-failure
+    depends_on:
+      - sglang
+    ports:
+      - "443:8443"
+    volumes:
+      - /var/run/dstack.sock:/var/run/dstack.sock
+      - cert-data:/cert-data
+      - cyberglm-data:/data
+    environment:
+      LISTEN_ADDR: ":8443"
+      UPSTREAM: "http://sglang:30000"
+      PUBLIC_BASE_URL: "https://cc-api.adverserial.ai"
+      ENDPOINT: "https://cc-api.adverserial.ai"
+      MODEL_ID: "lordx64/cyberglm"
+      POLICY_ID: "adverserial-policy/2026-10-04"
+      RECEIPT_ISSUER: "https://verify.adverserial.ai"
+      RECEIPT_AUDIENCE: "cc-chat.adverserial.ai"
+      VERIFICATION_URL: "https://verify.adverserial.ai"
+      DSTACK_SOCKET: "/var/run/dstack.sock"
+      ACME_DOMAINS: "cc-api.adverserial.ai,cc-chat.adverserial.ai"
+      ACME_EMAIL: "ops@adverserial.ai"
+      GANDI_ZONE: "adverserial.ai"
+      CERT_DIR: "/cert-data"
+      BILLING_URL: "https://billing.adverserial.ai"
+      AUTH_REQUIRED: "1"
+      CORS_ALLOW_ORIGIN: "https://cc-chat.adverserial.ai"
+      # sha256 of the chat bundle tarball — refuse to serve on mismatch
+      # (the bundle is fetched at runtime, outside the TDX measurement)
+      CHAT_BUNDLE_SHA256: "b07d61b83333e69a9316308b97940daba28b8ce5aedb52e001fc5d445ab5959e"
+      GPU_EVIDENCE_FILE: "/data/gpu-evidence.json"
+      GPU_EVIDENCE_OUT: "/data/gpu-evidence.json"
+    # GPU visibility is required by the collector sidecar (NVML evidence
+    # gathering); shares the CVM's 8×H200 with sglang.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 8
+              capabilities: [gpu]
+    command: >
+      bash -c '
+        set -ex;
+        mkdir -p /app && cd /app;
+        echo "$PROXY_SRC_B64" | base64 -d | tar xz;
+        echo "$COLLECTOR_SRC_B64" | base64 -d > /app/gpu_evidence_collector.py;
+        if [ ! -f /data/chat-dist/index.html ]; then
+          echo "fetching cc-chat bundle";
+          curl -sfL -H "Authorization: Bearer $HF_TOKEN" -o /tmp/chat-dist.tgz https://huggingface.co/datasets/lordx64/cc-chat-dist/resolve/main/chat-dist.tgz;
+          echo "$CHAT_BUNDLE_SHA256  /tmp/chat-dist.tgz" | sha256sum -c - || { echo "chat bundle hash mismatch — refusing to serve"; exit 1; };
+          mkdir -p /data/chat-dist && tar xzf /tmp/chat-dist.tgz -C /data/chat-dist && rm -f /tmp/chat-dist.tgz;
+        fi;
+        python3 -m pip install --quiet --break-system-packages nv-attestation-sdk || true;
+        python3 /app/gpu_evidence_collector.py --once || true;
+        (while true; do python3 /app/gpu_evidence_collector.py || true; sleep 300; done) &
+        go build -trimpath -o /usr/local/bin/attest-proxy ./cmd/attest-proxy;
+        exec attest-proxy
+      '
+
+volumes:
+  cyberglm-data:
+  cert-data:
