@@ -26,7 +26,12 @@ immutable GHCR image digests (proxy and GPU-evidence collector), their GitHub
 build provenance, and SBOM. Put those exact digests in the profile; never use
 a mutable image tag. Publish the matching source release first.
 
-The initial GHCR release-candidate images are private packages. Before any
+The current `v0.1.0-rc.2` release is pinned in the H200 profile:
+
+- proxy: `ghcr.io/adverserialai/attest-proxy@sha256:1d2d68368591c42c14512968c0570f076bd12bc68b243b1f97a6244055bfe1d0`
+- collector: `ghcr.io/adverserialai/gpu-evidence-collector@sha256:4688f81d93c9e0290daed55872c94efccece601d0a920eb163b1dfa14fa20ee5`
+
+Both were built from the public tag with GitHub provenance and SBOMs. The initial GHCR release-candidate images are private packages. Before any
 CVM compose pull, authenticate the CVM Docker runtime to `ghcr.io` with a
 dedicated read-only Packages token owned by the organization, stored in the
 platform's secret/deployment mechanism. Do not place that token in compose,
@@ -129,5 +134,5 @@ Before changing a policy status to `active`:
    missing quote, dev evidence, mismatched TLS key, expired receipt, replayed
    entitlement, incorrect canonical model ID, and failed meter settlement.
 
-Only then deploy `cc-chat` and guide users to `cc-api`. The existing public
+Only then deploy `cc-chat` and guide users to `cc-api`. `verify.adverserial.ai` is already deployed as the public registry; its evidence-pending state is intentional until this activation sequence has produced independently verifiable evidence. The existing public
 registry and client documentation intentionally fail closed before this step.
