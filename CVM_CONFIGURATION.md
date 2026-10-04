@@ -26,10 +26,10 @@ immutable GHCR image digests (proxy and GPU-evidence collector), their GitHub
 build provenance, and SBOM. Put those exact digests in the profile; never use
 a mutable image tag. Publish the matching source release first.
 
-The current `v0.1.0-rc.3` release is pinned in the H200 profile:
+The current `v0.1.0-rc.4` release is pinned in the H200 profile:
 
-- proxy: `ghcr.io/adverserialai/attest-proxy@sha256:17a48d77ca02e8b6290ea6d2cfe66ec66b598eebf9e4f3080766b1bd1c1433b4`
-- collector: `ghcr.io/adverserialai/gpu-evidence-collector@sha256:079936a0ef6663451b15b9ea6a87d5937a8a10a2f6ae9c44399a99573c06ad0a`
+- proxy: `ghcr.io/adverserialai/attest-proxy@sha256:af76ca0ec3454a9dd9d3db4feff908444c02298cb8ea1b317a35c79a96d0f2ac`
+- collector: `ghcr.io/adverserialai/gpu-evidence-collector@sha256:8b84b6807081246c11221e91785c3ceecec764fe2943fef5aaa01aebad0a5f61`
 
 Both were built from the public tag with GitHub provenance and SBOMs. The initial GHCR release-candidate images are private packages. Before any
 CVM compose pull, authenticate the CVM Docker runtime to `ghcr.io` with a
@@ -72,15 +72,17 @@ Hugging Face, a Docker image, or an ordinary shell history:
 
 | Value | Purpose |
 | --- | --- |
-| `SGLANG_LOOPBACK_TOKEN` | random credential used only proxy → loopback SGLang |
+| `SGLANG_LOOPBACK_TOKEN` | random credential used only proxy → loopback SGLang; it is the value passed to SGLang `--api-key` |
 | `METER_SIGNING_SEED` | 32-byte base64url Ed25519 seed for count-only meter events |
 | `GANDI_PAT` | DNS-01 credential restricted to the `adverserial.ai` zone; must be valid through the next renewal and rotated before expiry |
 | `ACME_EMAIL` | ACME incident/expiry contact |
 | `ENTITLEMENT_JWKS_JSON` | billing entitlement **public** JWK set, still sealed to keep the render self-contained |
 | `NV_ATTESTATION_SERVICE_KEY` | NVIDIA remote-attestation service key used only by the collector; it must not be visible to proxy or SGLang |
 
+Keep `CONFIDENTIAL_ACTIVATION=pre-activation` for the evidence-only boot. In this state every inference POST fails before its body is read. Set it to `active` only in the final approved activation change.
+
 Also set the non-secret release bindings: `POLICY_ID`, `MODEL_DIGEST`,
-`RUNTIME_DIGEST`, `COMPOSE_DIGEST`, pinned image digests, `MODEL_ID`,
+`RUNTIME_DIGEST`, `COMPOSE_DIGEST`, `CONFIDENTIAL_ACTIVATION`, pinned image digests, `MODEL_ID`,
 `SGLANG_MODEL_PATH`, `SGLANG_TP_SIZE`, `GPU_COUNT`,
 `GPU_EVIDENCE_EXPECTED_TYPE`, `NV_ATTESTATION_SERVICE_KEY`, and `SGLANG_CONTEXT_LENGTH`. The collector fails closed unless NVIDIA returns at least `GPU_COUNT` independently attested EATs.
 
@@ -135,7 +137,7 @@ Before changing a policy status to `active`:
    missing quote, dev evidence, mismatched TLS key, expired receipt, replayed
    entitlement, incorrect canonical model ID, and failed meter settlement.
 
-For a pre-activation boot, do not invent a `RUNTIME_DIGEST`. Use the explicit pre-activation value agreed in the activation record, obtain a fresh quote, then publish the independently verified measurement and deploy the final pinned value before activating any policy.
+For a pre-activation boot, do not invent a `RUNTIME_DIGEST`: retain the explicit `sha256:REPLACE_AFTER_REAL_TDX_MEASUREMENT` placeholder and keep `CONFIDENTIAL_ACTIVATION=pre-activation`. Obtain fresh evidence first, then publish the independently verified measurement and deploy the final pinned value before activating any policy.
 
 Only then deploy `cc-chat` and guide users to `cc-api`. `verify.adverserial.ai` is already deployed as the public registry; its evidence-pending state is intentional until this activation sequence has produced independently verifiable evidence. The existing public
 registry and client documentation intentionally fail closed before this step.

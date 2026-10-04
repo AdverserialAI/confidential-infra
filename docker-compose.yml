@@ -58,6 +58,7 @@ services:
       # Confidential authorization: normal platform keys stop at billing.
       AUTH_REQUIRED: "0"
       CONFIDENTIAL_MODE: "1"
+      CONFIDENTIAL_ACTIVATION: ${CONFIDENTIAL_ACTIVATION:-pre-activation}
       BILLING_URL: "https://billing.adverserial.ai"
       ENTITLEMENT_JWKS_JSON: ${ENTITLEMENT_JWKS_JSON:?billing entitlement public JWKS required}
       ENTITLEMENT_ISSUER: "https://billing.adverserial.ai"
