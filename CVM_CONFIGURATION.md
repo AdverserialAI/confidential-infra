@@ -135,5 +135,7 @@ Before changing a policy status to `active`:
    missing quote, dev evidence, mismatched TLS key, expired receipt, replayed
    entitlement, incorrect canonical model ID, and failed meter settlement.
 
+For a pre-activation boot, do not invent a `RUNTIME_DIGEST`. Use the explicit pre-activation value agreed in the activation record, obtain a fresh quote, then publish the independently verified measurement and deploy the final pinned value before activating any policy.
+
 Only then deploy `cc-chat` and guide users to `cc-api`. `verify.adverserial.ai` is already deployed as the public registry; its evidence-pending state is intentional until this activation sequence has produced independently verifiable evidence. The existing public
 registry and client documentation intentionally fail closed before this step.
