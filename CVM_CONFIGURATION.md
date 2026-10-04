@@ -97,6 +97,12 @@ The generated `billing` object provides `CC_ENTITLEMENT_PRIVATE_KEY`,
 `ENTITLEMENT_JWKS_JSON`, `METER_SIGNING_SEED`, and `SGLANG_LOOPBACK_TOKEN`.
 The script refuses to overwrite a file and creates it with mode `0600`.
 
+After you prepare the complete sealed file, run
+`ENV_FILE=/secure/path/cc-api.env bash scripts/prepare-deployment.sh`. It
+redacts sealed values before writing `dist/docker-compose.rendered.yml` and
+prints the `COMPOSE_DIGEST` for that exact configuration. Do not reuse a
+digest generated from the example file.
+
 Keep `CONFIDENTIAL_ACTIVATION=pre-activation` for the evidence-only boot. In this state every inference POST fails before its body is read. Set it to `active` only in the final approved activation change.
 
 Also set the non-secret release bindings: `POLICY_ID`, `MODEL_DIGEST`,

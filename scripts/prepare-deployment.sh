@@ -22,12 +22,29 @@ done
 [[ "$METER_SIGNING_SEED" != *$'\n'* ]] || { echo "METER_SIGNING_SEED must be one line" >&2; exit 2; }
 export COMPOSE_DIGEST="${COMPOSE_DIGEST:-sha256:SELF}"
 mkdir -p dist
-docker compose --env-file "$env_file" config > dist/docker-compose.rendered.yml
-python3 - <<'PY'
+umask 077
+raw_render="$(mktemp "${TMPDIR:-/tmp}/adverserial-compose.XXXXXX")"
+trap 'rm -f "$raw_render"' EXIT
+docker compose --env-file "$env_file" config > "$raw_render"
+python3 - "$raw_render" dist/docker-compose.rendered.yml <<'PY'
 import hashlib
+import os
+import sys
 from pathlib import Path
-path = Path("dist/docker-compose.rendered.yml")
-data = path.read_text()
+raw = Path(sys.argv[1]).read_text()
+# Never write a sealed value to the review artifact. Docker's rendered compose
+# includes both environment values and SGLang's command line, so redact each
+# secret by value before it reaches dist/ or the configuration fingerprint.
+for name in (
+    "SGLANG_LOOPBACK_TOKEN", "GANDI_PAT", "ENTITLEMENT_JWKS_JSON",
+    "METER_SIGNING_SEED", "NV_ATTESTATION_SERVICE_KEY",
+):
+    value = os.environ.get(name, "")
+    if value:
+        raw = raw.replace(value, f"REDACTED_{name}")
+path = Path(sys.argv[2])
+path.write_text(raw)
+data = raw
 needle = "COMPOSE_DIGEST: "
 lines = []
 for line in data.splitlines(keepends=True):
