@@ -21,7 +21,8 @@
 # sources. Build locally with scripts/build-compose.sh.
 services:
   sglang:
-    image: lmsysorg/sglang:latest
+    # Immutable OCI index digest captured for this reviewed template.
+    image: lmsysorg/sglang@sha256:b1259f3ea3275f66237c498ea388919729018bc9f01c3d638391e06e2cf3f469
     shm_size: 32gb
     restart: on-failure
     volumes:
