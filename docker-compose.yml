@@ -118,6 +118,8 @@ services:
       GPU_EVIDENCE_OUT: "/state/gpu-evidence.json"
       GPU_EVIDENCE_INTERVAL: ${GPU_EVIDENCE_INTERVAL:-300}
       GPU_EVIDENCE_EXPECTED_TYPE: ${GPU_EVIDENCE_EXPECTED_TYPE:?policy evidence type required}
+      GPU_EVIDENCE_MIN_GPU_COUNT: ${GPU_COUNT:?GPU count required}
+      NV_ATTESTATION_SERVICE_KEY: ${NV_ATTESTATION_SERVICE_KEY:?sealed NVIDIA attestation service key required}
     deploy:
       resources:
         reservations:

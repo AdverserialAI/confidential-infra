@@ -77,11 +77,12 @@ Hugging Face, a Docker image, or an ordinary shell history:
 | `GANDI_PAT` | DNS-01 credential restricted to the `adverserial.ai` zone; must be valid through the next renewal and rotated before expiry |
 | `ACME_EMAIL` | ACME incident/expiry contact |
 | `ENTITLEMENT_JWKS_JSON` | billing entitlement **public** JWK set, still sealed to keep the render self-contained |
+| `NV_ATTESTATION_SERVICE_KEY` | NVIDIA remote-attestation service key used only by the collector; it must not be visible to proxy or SGLang |
 
 Also set the non-secret release bindings: `POLICY_ID`, `MODEL_DIGEST`,
 `RUNTIME_DIGEST`, `COMPOSE_DIGEST`, pinned image digests, `MODEL_ID`,
 `SGLANG_MODEL_PATH`, `SGLANG_TP_SIZE`, `GPU_COUNT`,
-`GPU_EVIDENCE_EXPECTED_TYPE`, and `SGLANG_CONTEXT_LENGTH`.
+`GPU_EVIDENCE_EXPECTED_TYPE`, `NV_ATTESTATION_SERVICE_KEY`, and `SGLANG_CONTEXT_LENGTH`. The collector fails closed unless NVIDIA returns at least `GPU_COUNT` independently attested EATs.
 
 Use a Gandi token with DNS-01 permissions only. A one-year token is acceptable
 only if its scope is minimal and it has an owner/rotation date; a token that
