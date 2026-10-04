@@ -26,6 +26,14 @@ immutable GHCR image digests (proxy and GPU-evidence collector), their GitHub
 build provenance, and SBOM. Put those exact digests in the profile; never use
 a mutable image tag. Publish the matching source release first.
 
+The initial GHCR release-candidate images are private packages. Before any
+CVM compose pull, authenticate the CVM Docker runtime to `ghcr.io` with a
+dedicated read-only Packages token owned by the organization, stored in the
+platform's secret/deployment mechanism. Do not place that token in compose,
+the model volume, or a committed environment file. Alternatively, make the
+packages explicitly public as an intentional release decision; public source
+does not require public images.
+
 Prepare a model profile from `profiles/h200-cyberglm.env.example`. Its
 canonical model ID must be `lordx64/cyberglm`. The profile is the place for
 model path, tensor-parallelism, GPU count, context limit, collector evidence
