@@ -55,7 +55,7 @@ flowchart LR
   edge -->|signed inference receipt| chat
   edge -->|signed inference receipt| sdk
   edge --> meter
-  meter -->|mTLS, signed token counts only| ledger
+  meter -->|HTTPS + signed token counts only| ledger
   ledger --> payments
 ```
 
@@ -87,9 +87,11 @@ completions, attachments, chat history, raw API keys, or model weights.
    expiry.
 3. The proxy verifies the token locally. It never calls billing in the prompt
    path.
-4. After generation, the proxy emits one signed count-only event. Billing
-   verifies its signature, performs idempotent settlement, and releases any
-   unused reservation.
+4. After generation, the proxy emits one signed count-only event over HTTPS.
+   Billing verifies its signature, performs idempotent settlement, and releases
+   any unused reservation. The signed event is the current authorization
+   boundary because the existing Heroku billing ingress cannot verify a client
+   certificate. Add mTLS when billing moves behind an ingress that can enforce it.
 5. If the meter cannot deliver an event, its durable outbox retries it. The
    client response is not silently converted into an unbilled request.
 
@@ -121,7 +123,7 @@ acceptance tests.
 | Transport binding | Evidence and policy bind the TLS SPKI fingerprint observed by the client. |
 | Chat provenance | GitHub release provenance and an asset-integrity manifest that match the deployed static bundle. |
 | Entitlement authority | Public Ed25519 JWK set, short expiries, audience/model binding, replay controls, and issuer key rotation. |
-| Meter integrity | Proxy mTLS client certificate, signed usage event, idempotent request ID, durable outbox, and ledger settlement audit trail. |
+| Meter integrity | Current: signed usage event over HTTPS, idempotent request ID, durable outbox, and ledger settlement audit trail. Target hardening: proxy mTLS client certificate at a billing ingress that enforces client authentication. |
 
 ## Trust boundaries
 
