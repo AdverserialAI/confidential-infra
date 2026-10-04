@@ -6,5 +6,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: grep -R --line-number 'set -x' . && exit 1 || true
-      - run: grep -R --line-number 'image: .*:latest' docker-compose.yml && exit 1 || true
+      - name: Reject shell trace logging
+        run: "grep -R --line-number 'set -x' . && exit 1 || true"
+      - name: Reject mutable container tags
+        run: "grep -R --line-number 'image: .*:latest' docker-compose.yml && exit 1 || true"
