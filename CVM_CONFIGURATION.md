@@ -79,6 +79,19 @@ Hugging Face, a Docker image, or an ordinary shell history:
 | `ENTITLEMENT_JWKS_JSON` | billing entitlement **public** JWK set, still sealed to keep the render self-contained |
 | `NV_ATTESTATION_SERVICE_KEY` | NVIDIA remote-attestation service key used only by the collector; it must not be visible to proxy or SGLang |
 
+Generate the two local trust-boundary key pairs once, on an administrator
+workstation, without printing them:
+
+```bash
+python3 -m pip install cryptography
+python3 scripts/generate-confidential-key-material.py --out "$HOME/.config/adverserial/cc-key-material.json"
+```
+
+The generated `billing` object provides `CC_ENTITLEMENT_PRIVATE_KEY`,
+`CC_ENTITLEMENT_KEY_ID`, and `CC_METER_JWKS_JSON`; the `cvm` object provides
+`ENTITLEMENT_JWKS_JSON`, `METER_SIGNING_SEED`, and `SGLANG_LOOPBACK_TOKEN`.
+The script refuses to overwrite a file and creates it with mode `0600`.
+
 Keep `CONFIDENTIAL_ACTIVATION=pre-activation` for the evidence-only boot. In this state every inference POST fails before its body is read. Set it to `active` only in the final approved activation change.
 
 Also set the non-secret release bindings: `POLICY_ID`, `MODEL_DIGEST`,
