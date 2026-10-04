@@ -5,7 +5,7 @@ architecture. It is a target design, not a claim that every control is live.
 A client must reject an endpoint until it receives fresh hardware evidence,
 validates it independently, and finds a matching active policy.
 
-## Completed confidential path
+## Target confidential path
 
 ```mermaid
 flowchart LR

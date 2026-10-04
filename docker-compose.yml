@@ -38,8 +38,8 @@ services:
       UPSTREAM_BEARER_TOKEN: ${SGLANG_LOOPBACK_TOKEN:?sealed SGLang credential required}
       PUBLIC_BASE_URL: "https://cc-api.adverserial.ai"
       ENDPOINT: "https://cc-api.adverserial.ai"
-      MODEL_ID: "lordx64/cyberglm"
-      ATTESTED_MODELS: "lordx64/cyberglm"
+      MODEL_ID: ${MODEL_ID:?canonical publisher/model ID required}
+      ATTESTED_MODELS: ${MODEL_ID:?canonical publisher/model ID required}
       POLICY_ID: ${POLICY_ID:?published policy identifier required}
       COMPOSE_DIGEST: ${COMPOSE_DIGEST:?rendered compose digest required}
       MODEL_DIGEST: ${MODEL_DIGEST:?canonical model artifact digest required}
@@ -72,40 +72,31 @@ services:
   # namespace. The proxy overwrites client Authorization with the sealed
   # loopback credential below; no client token reaches SGLang.
   sglang:
-    image: lmsysorg/sglang@sha256:b1259f3ea3275f66237c498ea388919729018bc9f01c3d638391e06e2cf3f469
+    image: ${SGLANG_IMAGE:?set a pinned SGLang runtime image}
     restart: unless-stopped
     network_mode: "service:attest-proxy"
     depends_on:
       - attest-proxy
     shm_size: 32gb
     volumes:
-      - cyberglm-weights:/data:ro
+      - model-weights:/data:ro
     command: >
       python -m sglang.launch_server
-      --model-path /data/cyberglm-fp8
-      --served-model-name lordx64/cyberglm
+      --model-path ${SGLANG_MODEL_PATH:?model path under /data required}
+      --served-model-name ${MODEL_ID:?canonical publisher/model ID required}
       --host 127.0.0.1
       --port 30000
       --api-key ${SGLANG_LOOPBACK_TOKEN:?sealed SGLang credential required}
-      --tp 8
-      --trust-remote-code
-      --kv-cache-dtype fp8_e4m3
-      --dsa-prefill-backend flashmla_sparse_q8
-      --dsa-decode-backend flashmla_kv
-      --speculative-algorithm EAGLE
-      --speculative-num-steps 5
-      --speculative-eagle-topk 1
-      --speculative-num-draft-tokens 6
-      --mem-fraction-static 0.8
-      --context-length 1048576
-      --reasoning-parser glm45
-      --tool-call-parser glm47
+      --tp ${SGLANG_TP_SIZE:?tensor-parallel size required}
+      --mem-fraction-static ${SGLANG_MEM_FRACTION:?memory fraction required}
+      --context-length ${SGLANG_CONTEXT_LENGTH:?context length required}
+      ${SGLANG_MODEL_OPTIONS:-}
     deploy:
       resources:
         reservations:
           devices:
-            - driver: nvidia
-              count: 8
+            - driver: ${GPU_DRIVER:-nvidia}
+              count: ${GPU_COUNT:?GPU count required}
               capabilities: [gpu]
 
   # A released collector image runs NVIDIA NRAS collection independently and
@@ -125,17 +116,19 @@ services:
       - proxy-state:/state
     environment:
       GPU_EVIDENCE_OUT: "/state/gpu-evidence.json"
-      GPU_EVIDENCE_INTERVAL: "300"
+      GPU_EVIDENCE_INTERVAL: ${GPU_EVIDENCE_INTERVAL:-300}
+      GPU_EVIDENCE_EXPECTED_TYPE: ${GPU_EVIDENCE_EXPECTED_TYPE:?policy evidence type required}
     deploy:
       resources:
         reservations:
           devices:
-            - driver: nvidia
-              count: 8
+            - driver: ${GPU_DRIVER:-nvidia}
+              count: ${GPU_COUNT:?GPU count required}
               capabilities: [gpu]
 
 volumes:
-  cyberglm-weights:
+  model-weights:
+    name: ${MODEL_WEIGHTS_VOLUME:?external model weight volume required}
     external: true
   proxy-state:
     external: true
