@@ -15,9 +15,10 @@ evidence against an active signed policy.
 ## CVM deployment preparation
 
 `docker-compose.yml` is intentionally a **render-only template**. It has no
-deployable defaults: it requires immutable proxy and GPU-collector image
-digests, sealed credentials, a published policy identifier, and measured
-runtime/model digests. The template does not host `cc-chat`; the static
+deployable defaults: it requires immutable proxy, GPU-collector, and model-measurer image
+digests, sealed credentials, a published policy identifier, and a measured
+runtime digest. The model digest is generated from the read-only model volume
+inside the CVM before attest-proxy starts. The template does not host `cc-chat`; the static
 browser app is external and connects directly to `cc-api` after verification.
 
 Before any CVM change, create an untracked sealed-values file from
@@ -55,8 +56,10 @@ subsequent real attestation/measurement step is required before publishing a
 policy or enabling clients; do not set a production endpoint to verified
 before that evidence is independently validated.
 
-The proxy and collector release workflows build digest-pinned images with
-GitHub provenance and SBOM artifacts. Copy the resulting immutable GHCR
+The proxy, collector, and model-measurer release workflows build digest-pinned
+images with GitHub provenance and SBOM artifacts. The measurer has a read-only
+model mount and a write-only manifest volume; it has no network endpoint,
+credentials, or proxy state access. Copy the resulting immutable GHCR
 digests into the sealed values file; never use a mutable tag in the compose.
 
 ## Security

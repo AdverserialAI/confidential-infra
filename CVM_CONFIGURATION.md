@@ -57,6 +57,7 @@ It creates two isolated private named volumes during the one final deployment:
 | --- | --- | --- |
 | `proxy-state` | attest-proxy `/state` | ACME account/certificate, consumed entitlement IDs, count-only outbox, and the proxy’s locally materialized mTLS credential |
 | `gpu-evidence-state` | collector `/evidence` read-write; proxy `/evidence` read-only | signed NVIDIA evidence only |
+| `model-evidence-state` | model-measurer write; proxy read-only | deterministic model manifest only |
 
 Both runtime images pre-create their mount points as UID/GID `65532`, so Docker
 initializes an empty named volume with the correct owner at first boot. No
@@ -120,7 +121,7 @@ digest generated from the example file.
 
 For the single-update production path, set `CONFIDENTIAL_ACTIVATION=active` in the final sealed file, but first set billing's `CC_ALLOWED_MODELS` to an empty value. The proxy can then collect real evidence while billing refuses to issue every confidential entitlement. Do not activate access by changing the CVM again: publish and verify the active policy first, then set `CC_ALLOWED_MODELS=lordx64/cyberglm` in billing. This leaves the raw API key at billing and enables only the canonical CyberGLM model.
 
-Also set the non-secret release bindings: `POLICY_ID`, `MODEL_DIGEST`,
+Also set the non-secret release bindings: `POLICY_ID`, `MODEL_MANIFEST_FILE`,
 `RUNTIME_DIGEST`, `COMPOSE_DIGEST`, `CONFIDENTIAL_ACTIVATION`, pinned image digests, `MODEL_ID`,
 `SGLANG_MODEL_PATH`, `SGLANG_TP_SIZE`, `GPU_COUNT`,
 `GPU_EVIDENCE_EXPECTED_TYPE`, and `SGLANG_CONTEXT_LENGTH`. Set

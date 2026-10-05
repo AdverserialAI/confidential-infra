@@ -17,6 +17,9 @@ services:
     # ghcr.io/adverserialai/attest-proxy@sha256:<release-digest>
     image: ${ATTEST_PROXY_IMAGE:?set a pinned attest-proxy release image}
     restart: unless-stopped
+    depends_on:
+      model-measurer:
+        condition: service_completed_successfully
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=64m
@@ -36,6 +39,8 @@ services:
       # Collector output is a separate least-privilege volume. The proxy can
       # read signed GPU evidence but the collector cannot read proxy state.
       - gpu-evidence-state:/evidence:ro
+      # The proxy receives only the signed manifest, never the model files.
+      - model-evidence-state:/model-evidence:ro
     environment:
       LISTEN_ADDR: ":8443"
       UPSTREAM: "http://127.0.0.1:30000"
@@ -46,7 +51,8 @@ services:
       ATTESTED_MODELS: ${MODEL_ID:?canonical publisher/model ID required}
       POLICY_ID: ${POLICY_ID:?published policy identifier required}
       COMPOSE_DIGEST: ${COMPOSE_DIGEST:?rendered compose digest required}
-      MODEL_DIGEST: ${MODEL_DIGEST:?canonical model artifact digest required}
+      # Written once by the isolated model-measurer before the proxy starts.
+      MODEL_MANIFEST_FILE: ${MODEL_MANIFEST_FILE:?model artifact manifest path required}
       RUNTIME_DIGEST: ${RUNTIME_DIGEST:?attested runtime digest required}
       RECEIPT_ISSUER: "https://verify.adverserial.ai"
       RECEIPT_AUDIENCE: "https://cc-chat.adverserial.ai"
@@ -79,6 +85,24 @@ services:
       METER_ISSUER: "https://cc-api.adverserial.ai"
       METER_AUDIENCE: "https://billing.adverserial.ai"
       METER_OUTBOX_DIR: "/state/meter-outbox"
+
+  # The measurer sees model weights read-only and writes a deterministic
+  # manifest to a dedicated volume. It has no network, credentials, or API.
+  model-measurer:
+    image: ${MODEL_MEASURER_IMAGE:?set a pinned model-measurer release image}
+    restart: "no"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    user: "65532:65532"
+    volumes:
+      - model-weights:/model:ro
+      - model-evidence-state:/model-evidence
+    environment:
+      MODEL_ROOT: "/model${MODEL_ARTIFACT_PATH:?artifact path under /model required}"
+      MODEL_MANIFEST_FILE: ${MODEL_MANIFEST_FILE:?model artifact manifest path required}
+      MODEL_ID: ${MODEL_ID:?canonical publisher/model ID required}
 
   # The model has no public port and shares only attest-proxy's network
   # namespace. The proxy overwrites client Authorization with the sealed
@@ -149,3 +173,5 @@ volumes:
   # first boot. No out-of-band volume creation or secret injection is needed.
   proxy-state:
   gpu-evidence-state:
+  # Written once by model-measurer; proxy reads the digest only.
+  model-evidence-state:
