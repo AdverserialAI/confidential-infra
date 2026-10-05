@@ -32,7 +32,9 @@ print("CVM identity and 8xH200 resource shape verified")
 PY
 
 # This is intentionally the only mutating operation in the script. The pinned
-# compose and complete sealed environment are supplied together. public-tcbinfo
+# compose and complete sealed environment are supplied together. The historical
+# Compose-managed model volume is resolved by Compose itself; no bare Docker-volume
+# check runs before Compose. public-tcbinfo
 # remains available for independent attestation; logs and host sysinfo do not.
 # The image uses its immutable published slug: the dashboard's shorter display
 # alias was retired even though this production GPU image remains available.
@@ -43,7 +45,6 @@ phala deploy \
   --no-dev-os \
   --compose docker-compose.yml \
   --env "$env_file" \
-  --pre-launch-script scripts/cvm-pre-launch.sh \
   --no-public-logs \
   --no-public-sysinfo \
   --public-tcbinfo \

@@ -32,8 +32,9 @@ This validates required values, refuses unpinned release images, and writes
 `dist/docker-compose.rendered.yml` for review. It does **not** contact Phala,
 dstack, a GPU, Gandi, billing, or production DNS.
 
-The only pre-existing CVM volume is the existing model volume (`cyberglm-data`),
-mounted read-only into SGLang as `/data`. Docker creates two private named
+The only pre-existing CVM volume is the existing Compose-managed logical volume
+(`cyberglm-data`). Compose resolves its historical project-prefixed Docker name
+and mounts it read-only into SGLang as `/data`. Docker creates two private named
 volumes on the final deployment: `proxy-state` for ACME/replay/outbox state and
 a separate `gpu-evidence-state` for collector output. The proxy image
 pre-creates its state directory with UID/GID `65532`, and the collector image

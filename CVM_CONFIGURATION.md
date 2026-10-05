@@ -50,7 +50,7 @@ The final compose reuses exactly one pre-existing named volume:
 
 | Volume | Mount | Allowed contents |
 | --- | --- | --- |
-| `cyberglm-data` | SGLang `/data` read-only | the existing model artifact only |
+| `cyberglm-data` (Compose logical name) | SGLang `/data` read-only | the existing model artifact only; Docker may store it with the historical Compose project prefix |
 
 It creates two isolated private named volumes during the one final deployment:
 
@@ -216,10 +216,13 @@ registry and client documentation fail closed before that point.
 
 ## 6. One production CVM update
 
-The inherited CVM pre-launch script prunes Docker volumes and is not acceptable
-for this deployment. The checked-in `scripts/cvm-pre-launch.sh` replaces it
-with a read-only check for the existing `cyberglm-data` volume and model path.
-It never prunes, stops, deletes, or mutates model data.
+Do not replace the pre-launch script used by the last known-good CVM startup
+until Phala has restored that configuration. The confidential Compose profile
+uses the original `cyberglm-data` **logical** volume name so Docker Compose
+resolves its historical project-prefixed Docker-volume name. It intentionally
+does not inspect a guessed bare Docker-volume name before Compose starts.
+Model availability is checked through the mounted `/data/cyberglm-fp8` path by
+the model-measurer before attest-proxy can become ready.
 
 After every external prerequisite above has a real value and the rendered
 compose has been reviewed, execute exactly once from this repository:

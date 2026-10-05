@@ -101,7 +101,7 @@ services:
     cap_drop: [ALL]
     user: "65532:65532"
     volumes:
-      - model-weights:/model:ro
+      - cyberglm-data:/model:ro
       - model-evidence-state:/model-evidence
     environment:
       MODEL_ROOT: "/model${MODEL_ARTIFACT_PATH:?artifact path under /model required}"
@@ -119,7 +119,7 @@ services:
       - attest-proxy
     shm_size: 32gb
     volumes:
-      - model-weights:/data:ro
+      - cyberglm-data:/data:ro
     command: >
       python -m sglang.launch_server
       --model-path ${SGLANG_MODEL_PATH:?model path under /data required}
@@ -170,9 +170,9 @@ services:
               capabilities: [gpu]
 
 volumes:
-  model-weights:
-    name: ${MODEL_WEIGHTS_VOLUME:?external model weight volume required}
-    external: true
+  # Preserve the original Compose-managed model volume. Compose resolves its
+  # project-prefixed Docker name; services use this logical name.
+  cyberglm-data:
   # Docker initializes these private volumes from image-owned directories on
   # first boot. No out-of-band volume creation or secret injection is needed.
   proxy-state:
