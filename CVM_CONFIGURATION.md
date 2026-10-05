@@ -123,7 +123,16 @@ For the single-update production path, set `CONFIDENTIAL_ACTIVATION=active` in t
 Also set the non-secret release bindings: `POLICY_ID`, `MODEL_DIGEST`,
 `RUNTIME_DIGEST`, `COMPOSE_DIGEST`, `CONFIDENTIAL_ACTIVATION`, pinned image digests, `MODEL_ID`,
 `SGLANG_MODEL_PATH`, `SGLANG_TP_SIZE`, `GPU_COUNT`,
-`GPU_EVIDENCE_EXPECTED_TYPE`, `NV_ATTESTATION_SERVICE_KEY`, and `SGLANG_CONTEXT_LENGTH`. The collector fails closed unless NVIDIA returns at least `GPU_COUNT` independently attested EATs.
+`GPU_EVIDENCE_EXPECTED_TYPE`, and `SGLANG_CONTEXT_LENGTH`. Set
+`NV_ATTESTATION_SERVICE_KEY` only in the sealed environment: it is a service
+credential, not a public release binding. The collector fails closed unless
+NVIDIA returns at least `GPU_COUNT` independently attested EATs.
+
+For the existing H200 CVM, use the immutable Phala production GPU image slug
+`dstack-nvidia-0.5.9-806a352e` (OS image hash
+`806a352e16175d90568de97dff563f31f680239e6b90e9b5b2e9141d0955b0d9`). Do
+not use the shorter `dstack-nvidia-0.5.9` display alias; Phala has retired it
+from the image selector.
 
 Use a Gandi token with DNS-01 permissions only. A one-year token is acceptable
 only if its scope is minimal and it has an owner/rotation date; a token that
