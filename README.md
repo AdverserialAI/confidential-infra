@@ -31,15 +31,19 @@ This validates required values, refuses unpinned release images, and writes
 `dist/docker-compose.rendered.yml` for review. It does **not** contact Phala,
 dstack, a GPU, Gandi, billing, or production DNS.
 
-The CVM needs two external persistent volumes prepared with owner `65532:65532`
-and mode `0700`:
+The only pre-existing CVM volume is the existing model volume (`cyberglm-data`),
+mounted read-only into SGLang as `/data`. Docker creates two private named
+volumes on the final deployment: `proxy-state` for ACME/replay/outbox state and
+a separate `gpu-evidence-state` for collector output. The proxy image
+pre-creates its state directory with UID/GID `65532`, and the collector image
+pre-creates its evidence directory with the same ownership. The collector can
+write evidence but cannot read meter credentials, replay state, ACME state, or
+model weights.
 
-| Volume | Mounted to | Contents |
-| --- | --- | --- |
-| `cyberglm-weights` | SGLang `/data` read-only | model artifact only |
-| `proxy-state` | proxy/collector `/state` | ACME state, consumed opaque entitlement IDs, signed meter outbox, and NVIDIA evidence only |
-
-The model-weight volume is never mounted into the proxy or collector. SGLang
+The proxy receives the mTLS client certificate, private key, and ingress CA as
+one sealed `METER_TLS_BUNDLE_B64` value. It validates and atomically
+materializes those files with mode `0600` into its own private state at boot;
+there is no manually provisioned credential volume. SGLang
 shares the proxy network namespace and binds only `127.0.0.1:30000`; it also
 requires a distinct sealed loopback token. Customer API keys terminate at
 billing and the CVM receives only one-use billing entitlements.

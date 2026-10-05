@@ -28,14 +28,14 @@ services:
       - "443:8443"
     volumes:
       - /var/run/dstack.sock:/var/run/dstack.sock:ro
-      # This volume must be created with uid/gid 65532 and mode 0700 before
-      # deployment. It holds only ACME state, replay IDs, meter records, and
-      # cached GPU evidence — never model weights or user prompts.
+      # Private proxy state. The image pre-creates /state as uid/gid 65532;
+      # Docker initializes this named volume from that directory. It holds ACME
+      # state, replay IDs, meter records, and the locally materialized mTLS
+      # client bundle — never model weights, prompts, or GPU evidence.
       - proxy-state:/state
-      # Separate external volume containing only this CVM's mTLS client
-      # certificate/key and the meter-ingress CA. Create it mode 0700,
-      # owned by uid/gid 65532; never put it in the model or proxy-state volume.
-      - meter-client-tls:/run/secrets/meter-tls:ro
+      # Collector output is a separate least-privilege volume. The proxy can
+      # read signed GPU evidence but the collector cannot read proxy state.
+      - gpu-evidence-state:/evidence:ro
     environment:
       LISTEN_ADDR: ":8443"
       UPSTREAM: "http://127.0.0.1:30000"
@@ -58,7 +58,7 @@ services:
       GANDI_PAT: ${GANDI_PAT:?sealed Gandi DNS token required}
       CERT_DIR: "/state/certificates"
       CORS_ALLOW_ORIGIN: "https://cc-chat.adverserial.ai"
-      GPU_EVIDENCE_FILE: "/state/gpu-evidence.json"
+      GPU_EVIDENCE_FILE: "/evidence/gpu-evidence.json"
       # Confidential authorization: normal platform keys stop at billing.
       AUTH_REQUIRED: "0"
       CONFIDENTIAL_MODE: "1"
@@ -67,14 +67,15 @@ services:
       # ingress. The proxy validates this ingress's CA and presents its own
       # sealed client key; direct delivery to Heroku billing is forbidden.
       METER_URL: ${METER_URL:?mTLS meter-ingress URL required}
-      METER_CLIENT_CERT_FILE: "/run/secrets/meter-tls/client.crt"
-      METER_CLIENT_KEY_FILE: "/run/secrets/meter-tls/client.key"
-      METER_SERVER_CA_FILE: "/run/secrets/meter-tls/ingress-ca.crt"
+      # A single sealed base64url JSON value; attest-proxy validates and
+      # atomically writes it under /state/meter-tls with mode 0600.
+      METER_TLS_BUNDLE_B64: ${METER_TLS_BUNDLE_B64:?sealed mTLS client bundle required}
       ENTITLEMENT_JWKS_JSON: ${ENTITLEMENT_JWKS_JSON:?billing entitlement public JWKS required}
       ENTITLEMENT_ISSUER: "https://billing.adverserial.ai"
       ENTITLEMENT_AUDIENCE: "https://cc-api.adverserial.ai"
       ENTITLEMENT_REPLAY_DIR: "/state/used-entitlements"
       METER_SIGNING_SEED: ${METER_SIGNING_SEED:?sealed proxy meter seed required}
+      RECEIPT_SIGNING_SEED: ${RECEIPT_SIGNING_SEED:?sealed proxy receipt seed required}
       METER_ISSUER: "https://cc-api.adverserial.ai"
       METER_AUDIENCE: "https://billing.adverserial.ai"
       METER_OUTBOX_DIR: "/state/meter-outbox"
@@ -111,8 +112,9 @@ services:
               capabilities: [gpu]
 
   # A released collector image runs NVIDIA NRAS collection independently and
-  # writes only signed GPU evidence into proxy-state. It gets GPU access but
-  # never receives model-weight or customer-data volumes.
+  # writes only signed GPU evidence into its dedicated evidence volume. It gets
+  # GPU access but never receives model weights, prompts, proxy state, or
+  # metering credentials.
   gpu-evidence-collector:
     image: ${GPU_EVIDENCE_COLLECTOR_IMAGE:?set a pinned collector release image}
     restart: unless-stopped
@@ -124,13 +126,9 @@ services:
     cap_drop: [ALL]
     user: "65532:65532"
     volumes:
-      - proxy-state:/state
-      # Separate external volume containing only this CVM's mTLS client
-      # certificate/key and the meter-ingress CA. Create it mode 0700,
-      # owned by uid/gid 65532; never put it in the model or proxy-state volume.
-      - meter-client-tls:/run/secrets/meter-tls:ro
+      - gpu-evidence-state:/evidence
     environment:
-      GPU_EVIDENCE_OUT: "/state/gpu-evidence.json"
+      GPU_EVIDENCE_OUT: "/evidence/gpu-evidence.json"
       GPU_EVIDENCE_INTERVAL: ${GPU_EVIDENCE_INTERVAL:-300}
       GPU_EVIDENCE_EXPECTED_TYPE: ${GPU_EVIDENCE_EXPECTED_TYPE:?policy evidence type required}
       GPU_EVIDENCE_MIN_GPU_COUNT: ${GPU_COUNT:?GPU count required}
@@ -147,8 +145,7 @@ volumes:
   model-weights:
     name: ${MODEL_WEIGHTS_VOLUME:?external model weight volume required}
     external: true
+  # Docker initializes these private volumes from image-owned directories on
+  # first boot. No out-of-band volume creation or secret injection is needed.
   proxy-state:
-    external: true
-  meter-client-tls:
-    name: ${METER_CLIENT_TLS_VOLUME:?external mTLS client-secret volume required}
-    external: true
+  gpu-evidence-state:

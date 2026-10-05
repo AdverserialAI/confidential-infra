@@ -47,25 +47,36 @@ profile with `lordx64/cyberkimi`; it does not modify the GLM policy.
 
 ## 2. CVM storage and network prerequisites
 
-Create two external volumes before rendering compose:
+The final compose reuses exactly one pre-existing named volume:
 
-| Volume | Permission | Mount | Allowed contents |
-| --- | --- | --- | --- |
-| configured `MODEL_WEIGHTS_VOLUME` | model runtime user read-only | SGLang `/data` | model artifact only |
-| `proxy-state` | UID/GID `65532:65532`, mode `0700` | proxy/collector `/state` | certificates, one-use entitlement IDs, meter outbox, GPU evidence |
-| configured `METER_CLIENT_TLS_VOLUME` | UID/GID `65532:65532`, mode `0700` | proxy `/run/secrets/meter-tls` (read-only) | CVM meter client leaf certificate/key and meter-ingress CA only |
+| Volume | Mount | Allowed contents |
+| --- | --- | --- |
+| `cyberglm-data` | SGLang `/data` read-only | the existing model artifact only |
 
-The model volume must never be mounted into the proxy or evidence collector.
-Expose only TCP 443 to `attest-proxy`. SGLang is `127.0.0.1:30000` in the
-proxy's shared network namespace, protected with its own random loopback
-credential. There is no public SGLang port.
+It creates two isolated private named volumes during the one final deployment:
 
-At DNS, `cc-api.adverserial.ai` must use L4/SNI pass-through to the CVM. Do not
-terminate TLS at Heroku, Cloudflare, Gandi, a load balancer, or a GPU proxy.
-The CVM needs outbound access only to the selected ACME CA/DNS API, the
-container registry, the NVIDIA evidence service, the immutable policy/source sites, and the dedicated
-`meter-ingress.adverserial.ai` endpoint for count-only meter delivery. It does
-not directly call `billing.adverserial.ai` from the CVM.
+| Volume | Mount | Allowed contents |
+| --- | --- | --- |
+| `proxy-state` | attest-proxy `/state` | ACME account/certificate, consumed entitlement IDs, count-only outbox, and the proxy’s locally materialized mTLS credential |
+| `gpu-evidence-state` | collector `/evidence` read-write; proxy `/evidence` read-only | signed NVIDIA evidence only |
+
+Both runtime images pre-create their mount points as UID/GID `65532`, so Docker
+initializes an empty named volume with the correct owner at first boot. No
+manual secret volume, container shell step, or mutable bootstrap process is
+part of production. The collector receives no model, proxy-state, certificate,
+or meter-key mount.
+
+Expose only TCP 443 from `attest-proxy`. SGLang is `127.0.0.1:30000` in the
+proxy's shared network namespace, protected by a distinct loopback credential.
+There is no public SGLang port.
+
+At DNS, `cc-api.adverserial.ai` must use Phala’s documented L4/SNI
+TLS-pass-through hostname for port 443 of this CVM. Do not terminate TLS at
+Heroku, Cloudflare, Gandi, a load balancer, or a GPU proxy. The CVM needs
+outbound access only to the selected ACME CA/DNS API, the container registry,
+the NVIDIA evidence service, immutable policy/source sites, and the dedicated
+`meter-ingress.adverserial.ai` endpoint for count-only delivery. It does not
+directly call `billing.adverserial.ai`.
 
 ## 3. Sealed CVM environment values
 
@@ -86,7 +97,8 @@ running inference service.
 | `ENTITLEMENT_JWKS_JSON` | billing entitlement **public** JWK set, still sealed to keep the render self-contained |
 | `NV_ATTESTATION_SERVICE_KEY` | NVIDIA remote-attestation service key used only by the collector; it must not be visible to proxy or SGLang |
 | `METER_URL` | exact external mTLS ingress origin, e.g. `https://meter-ingress.adverserial.ai`; never the Heroku billing origin |
-| `METER_CLIENT_TLS_VOLUME` | name of the external CVM-only volume containing `client.crt`, `client.key`, and `ingress-ca.crt`; its contents are not environment variables and must never be committed |
+| `METER_TLS_BUNDLE_B64` | sealed one-line base64url JSON containing `client_cert_pem`, `client_key_pem`, and `ingress_ca_pem`; attest-proxy validates it and writes private files under `proxy-state` at boot |
+| `RECEIPT_SIGNING_SEED` | sealed 32-byte base64url P-256 seed; only the derived public JWK is published in the signed policy |
 
 Generate the two local trust-boundary key pairs once, on an administrator
 workstation, without printing them:
@@ -157,11 +169,12 @@ python3 scripts/generate-meter-mtls-material.py \
   --ingress-out "$HOME/.config/adverserial/cc-meter-ingress"
 ```
 
-Upload only `client.crt`, `client.key`, and `ingress-ca.crt` from the CVM
-output to the sealed external `METER_CLIENT_TLS_VOLUME`; configure the ingress
-with its separate server files and `client-ca.crt`. Use the emitted
-`EXPECTED_CLIENT_SPKI_SHA256` at the ingress. Never put the CVM client key in
-billing, the ingress host, an image, or an environment variable.
+Encode only `client.crt`, `client.key`, and `ingress-ca.crt` from the CVM
+output into the sealed `METER_TLS_BUNDLE_B64` deployment value; configure the
+ingress with its separate server files and `client-ca.crt`. The proxy validates
+this bundle and writes the private key only to its isolated state volume. Use
+the emitted `EXPECTED_CLIENT_SPKI_SHA256` at the ingress. Never put the CVM
+client key in billing, the ingress host, an image, Git, or an unsealed file.
 
 Billing returns a five-minute, single-use, model-scoped entitlement after it
 reserves bounded usage. The raw customer API key terminates at billing. The
