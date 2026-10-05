@@ -12,7 +12,7 @@ set +a
 # COMPOSE_DIGEST is deliberately excluded here: it is the digest emitted below
 # after normalizing its own field to sha256:SELF. This avoids a self-referential
 # hash while still binding every other rendered deployment value.
-for v in ATTEST_PROXY_IMAGE GPU_EVIDENCE_COLLECTOR_IMAGE MODEL_MEASURER_IMAGE SGLANG_LOOPBACK_TOKEN POLICY_ID MODEL_MANIFEST_FILE MODEL_ARTIFACT_PATH RUNTIME_DIGEST ACME_EMAIL GANDI_PAT ENTITLEMENT_JWKS_JSON METER_SIGNING_SEED RECEIPT_SIGNING_SEED METER_TLS_BUNDLE_B64 NV_ATTESTATION_SERVICE_KEY; do
+for v in ATTEST_PROXY_IMAGE GPU_EVIDENCE_COLLECTOR_IMAGE MODEL_MEASURER_IMAGE SGLANG_LOOPBACK_TOKEN POLICY_ID MODEL_MANIFEST_FILE MODEL_ARTIFACT_PATH RUNTIME_DIGEST ACME_EMAIL GANDI_PAT ENTITLEMENT_JWKS_JSON METER_SIGNING_SEED RECEIPT_SIGNING_SEED METER_INGRESS_SHARED_SECRET NV_ATTESTATION_SERVICE_KEY; do
   [ -n "${!v:-}" ] || { echo "missing $v" >&2; exit 2; }
 done
 for image in "$ATTEST_PROXY_IMAGE" "$GPU_EVIDENCE_COLLECTOR_IMAGE" "$MODEL_MEASURER_IMAGE"; do
@@ -21,7 +21,7 @@ done
 [[ "$SGLANG_LOOPBACK_TOKEN" != *$'\n'* ]] || { echo "SGLANG_LOOPBACK_TOKEN must be one line" >&2; exit 2; }
 [[ "$METER_SIGNING_SEED" != *$'\n'* ]] || { echo "METER_SIGNING_SEED must be one line" >&2; exit 2; }
 [[ "$RECEIPT_SIGNING_SEED" != *$'\n'* ]] || { echo "RECEIPT_SIGNING_SEED must be one line" >&2; exit 2; }
-[[ "$METER_TLS_BUNDLE_B64" != *$'\n'* ]] || { echo "METER_TLS_BUNDLE_B64 must be one line" >&2; exit 2; }
+[[ "$METER_INGRESS_SHARED_SECRET" != *$'\n'* ]] || { echo "METER_INGRESS_SHARED_SECRET must be one line" >&2; exit 2; }
 export COMPOSE_DIGEST="${COMPOSE_DIGEST:-sha256:SELF}"
 mkdir -p dist
 umask 077
@@ -39,7 +39,7 @@ raw = Path(sys.argv[1]).read_text()
 # secret by value before it reaches dist/ or the configuration fingerprint.
 for name in (
     "SGLANG_LOOPBACK_TOKEN", "GANDI_PAT", "ENTITLEMENT_JWKS_JSON",
-    "METER_SIGNING_SEED", "RECEIPT_SIGNING_SEED", "METER_TLS_BUNDLE_B64", "NV_ATTESTATION_SERVICE_KEY",
+    "METER_SIGNING_SEED", "RECEIPT_SIGNING_SEED", "METER_INGRESS_SHARED_SECRET", "NV_ATTESTATION_SERVICE_KEY",
 ):
     value = os.environ.get(name, "")
     if value:

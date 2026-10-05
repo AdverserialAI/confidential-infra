@@ -55,8 +55,7 @@ flowchart LR
   edge -->|signed inference receipt| chat
   edge -->|signed inference receipt| sdk
   edge --> meter
-  meter -->|TLS 1.3 mTLS + signed token counts| meterIngress
-  meterIngress -->|fixed HTTPS upstream + ingress auth| ledger
+  meter -->|TLS 1.3 + signed token counts| billing
   ledger --> payments
 ```
 
@@ -89,11 +88,9 @@ completions, attachments, chat history, raw API keys, or model weights.
 3. The proxy verifies the token locally. It never calls billing in the prompt
    path.
 4. After generation, the proxy emits one signed count-only event to a durable
-   outbox. It sends that record to a separate TLS 1.3 mTLS meter ingress,
-   which validates the dedicated CVM client certificate and its pinned SPKI.
-   The ingress forwards only the unchanged meter envelope to its fixed billing
-   URL. Billing requires the ingress authentication header **and** verifies
-   the proxy Ed25519 signature before idempotent settlement.
+   outbox. It sends that record directly over outbound TLS 1.3 to the fixed
+   billing origin. Billing requires the dedicated meter capability **and**
+   verifies the proxy Ed25519 signature before idempotent settlement.
 5. If the meter cannot deliver an event, its durable outbox retries it. The
    client response is not silently converted into an unbilled request.
 
@@ -125,7 +122,7 @@ acceptance tests.
 | Transport binding | Evidence and policy bind the TLS SPKI fingerprint observed by the client. |
 | Chat provenance | GitHub release provenance and an asset-integrity manifest that match the deployed static bundle. |
 | Entitlement authority | Public Ed25519 JWK set, short expiries, audience/model binding, replay controls, and issuer key rotation. |
-| Meter integrity | TLS 1.3 mTLS at separately deployed meter ingress, dedicated CVM client certificate plus optional SPKI pin, signed count-only JWS, durable outbox, idempotent reservation settlement, and ledger audit trail. The ingress must be deployed before activation. |
+| Meter integrity | Outbound TLS 1.3 to a fixed billing origin, dedicated meter capability, signed count-only JWS, durable outbox, idempotent reservation settlement, and ledger audit trail. A separately deployed mTLS ingress is an optional stronger network boundary. |
 
 ## Trust boundaries
 

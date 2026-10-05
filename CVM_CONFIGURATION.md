@@ -26,11 +26,11 @@ immutable GHCR image digests (proxy and GPU-evidence collector), their GitHub
 build provenance, and SBOM. Put those exact digests in the profile; never use
 a mutable image tag. Publish the matching source release first.
 
-The current `v0.1.0-rc.10` release is pinned in the H200 profile:
+The current `v0.1.0-rc.11` release is pinned in the H200 profile:
 
-- proxy: `ghcr.io/adverserialai/attest-proxy@sha256:309837aed54ad45e2a6222c8d8389d9a748cb9c991406d4833423c0ea8f7578c`
-- collector: `ghcr.io/adverserialai/gpu-evidence-collector@sha256:9e9410515db77d4940a8b63c3604055cf666b9e4bd6590952f4270b5019d0de3`
-- model measurer: `ghcr.io/adverserialai/model-measurer@sha256:45a687a1a890e6a03092068125390c43637cb9d3b0136e8367f0e7479a2bb0ab`
+- proxy: `ghcr.io/adverserialai/attest-proxy@sha256:feffcfc7e2fd9f5843341205355955961be68d1647d1f360feb854ded6ef0522`
+- collector: `ghcr.io/adverserialai/gpu-evidence-collector@sha256:8fb8bcae0ec83b07452344b6350d8657e2a12e7bcd7a575a76ad06002496b17b`
+- model measurer: `ghcr.io/adverserialai/model-measurer@sha256:cd8eac2c773f9ef027cd9909f856b4cf57bcefdfa3b4880eaeb2e9217ee8358c`
 
 All three images, including the read-only model measurer, were built from the public tag with GitHub provenance and SBOMs. Their
 immutable manifests have been verified as publicly pullable before this
@@ -56,7 +56,7 @@ It creates two isolated private named volumes during the one final deployment:
 
 | Volume | Mount | Allowed contents |
 | --- | --- | --- |
-| `proxy-state` | attest-proxy `/state` | ACME account/certificate, consumed entitlement IDs, count-only outbox, and the proxy’s locally materialized mTLS credential |
+| `proxy-state` | attest-proxy `/state` | ACME account/certificate, consumed entitlement IDs, and count-only outbox |
 | `gpu-evidence-state` | collector `/evidence` read-write; proxy `/evidence` read-only | signed NVIDIA evidence only |
 | `model-evidence-state` | model-measurer write; proxy read-only | deterministic model manifest only |
 
@@ -75,9 +75,9 @@ TLS-pass-through hostname for port 443 of this CVM: `b74e3dde6292cc69bac759b22fc
 Do not terminate TLS at Heroku, Cloudflare, Gandi, a load balancer, or a GPU
 proxy. The CVM needs
 outbound access only to the selected ACME CA/DNS API, the container registry,
-the NVIDIA evidence service, immutable policy/source sites, and the dedicated
-`meter-ingress.adverserial.ai` endpoint for count-only delivery. It does not
-directly call `billing.adverserial.ai`.
+the NVIDIA evidence service, immutable policy/source sites, and
+`billing.adverserial.ai` for signed count-only meter delivery. It does not
+send prompts, completions, customer API keys, or entitlements to billing.
 
 ## 3. Sealed CVM environment values
 
@@ -97,8 +97,9 @@ running inference service.
 | `ACME_EMAIL` | ACME incident/expiry contact |
 | `ENTITLEMENT_JWKS_JSON` | billing entitlement **public** JWK set, still sealed to keep the render self-contained |
 | `NV_ATTESTATION_SERVICE_KEY` | NVIDIA remote-attestation service key used only by the collector; it must not be visible to proxy or SGLang |
-| `METER_URL` | exact external mTLS ingress origin, e.g. `https://meter-ingress.adverserial.ai`; never the Heroku billing origin |
-| `METER_TLS_BUNDLE_B64` | sealed one-line base64url JSON containing `client_cert_pem`, `client_key_pem`, and `ingress_ca_pem`; attest-proxy validates it and writes private files under `proxy-state` at boot |
+| `METER_DELIVERY_MODE` | `direct-signed` for this H200 deployment; this must be explicit rather than inferred |
+| `METER_URL` | fixed `https://billing.adverserial.ai` origin for signed count-only delivery |
+| `METER_INGRESS_SHARED_SECRET` | sealed dedicated meter capability; billing requires it in addition to a valid proxy Ed25519 JWS |
 | `RECEIPT_SIGNING_SEED` | sealed 32-byte base64url P-256 seed; only the derived public JWK is published in the signed policy |
 
 Generate the two local trust-boundary key pairs once, on an administrator
@@ -153,46 +154,16 @@ confidential prompt, deploy that change in a staged billing release and set:
 - `CC_ENTITLEMENT_KEY_ID`: the corresponding stable public-key ID.
 - `CC_METER_JWKS_JSON`: public JWK for the CVM meter signer derived from
   `METER_SIGNING_SEED`.
-- `CC_METER_INGRESS_SHARED_SECRET`: a new high-entropy shared secret held
-  only by billing and `confidential-meter-ingress`. Billing rejects direct
-  `/cc/meter` requests without the ingress header before parsing an event.
+- `CC_METER_INGRESS_SHARED_SECRET`: a new high-entropy count-only meter
+  capability held only by billing and the CVM proxy. Billing rejects meter
+  requests without it before parsing an event, then verifies the JWS.
 - `CC_ALLOWED_MODELS=lordx64/cyberglm` for the first rollout.
 - `CC_ENTITLEMENT_AUDIENCE=https://cc-api.adverserial.ai` and
   `CC_METER_ISSUER=https://cc-api.adverserial.ai`.
 
-Deploy [`AdverserialAI/confidential-meter-ingress`](https://github.com/AdverserialAI/confidential-meter-ingress)
-outside the CVM, at `meter-ingress.adverserial.ai`, before configuring the CVM.
-It must have a true L4/TCP pass-through edge so its Go process terminates TLS
-and validates the dedicated CVM client certificate itself. Give it a fixed
-HTTPS upstream of `https://billing.adverserial.ai/cc/meter`, its server
-certificate/key, the client CA public certificate, the expected client SPKI
-fingerprint, and the same `CC_METER_INGRESS_SHARED_SECRET`.
+The production H200 profile uses direct-signed count-only delivery and therefore does not require an additional CPU CVM or a public meter endpoint. The proxy opens outbound TLS 1.3 only to the fixed billing origin. It sends a compact Ed25519 JWS containing a reservation ID, request ID, canonical model ID, and token counts. Billing requires both this valid signature and `CC_METER_INGRESS_SHARED_SECRET`, then settles the reservation idempotently. It never receives prompt or completion bytes on this path.
 
-Generate dedicated material on an administrator workstation; the script never
-prints a private key and writes files with mode `0600`:
-
-```bash
-python3 -m pip install cryptography
-python3 scripts/generate-meter-mtls-material.py \
-  --ingress-hostname meter-ingress.adverserial.ai \
-  --cvm-out "$HOME/.config/adverserial/cc-meter-cvm" \
-  --ingress-out "$HOME/.config/adverserial/cc-meter-ingress"
-```
-
-Encode only `client.crt`, `client.key`, and `ingress-ca.crt` from the CVM
-output into the sealed `METER_TLS_BUNDLE_B64` deployment value; configure the
-ingress with its separate server files and `client-ca.crt`. The proxy validates
-this bundle and writes the private key only to its isolated state volume. Use
-the emitted `EXPECTED_CLIENT_SPKI_SHA256` at the ingress. Never put the CVM
-client key in billing, the ingress host, an image, Git, or an unsealed file.
-
-Billing returns a five-minute, single-use, model-scoped entitlement after it
-reserves bounded usage. The raw customer API key terminates at billing. The
-CVM receives only the entitlement. After inference it durably writes a signed,
-count-only meter event, then sends it over TLS 1.3 with its client certificate
-to the ingress. The ingress forwards the unchanged envelope over its fixed
-HTTPS billing connection. Billing verifies both the ingress secret and the
-proxy's Ed25519 signature, then settles the reservation idempotently.
+A separately deployed [`AdverserialAI/confidential-meter-ingress`](https://github.com/AdverserialAI/confidential-meter-ingress) can be selected later for a stronger, independently mTLS-authenticated network boundary. That design requires a dedicated CPU TEE and meter client certificate rotation. Do not describe the direct-signed profile as mTLS.
 
 ## 5. Evidence, policy, and client activation
 

@@ -41,10 +41,9 @@ pre-creates its evidence directory with the same ownership. The collector can
 write evidence but cannot read meter credentials, replay state, ACME state, or
 model weights.
 
-The proxy receives the mTLS client certificate, private key, and ingress CA as
-one sealed `METER_TLS_BUNDLE_B64` value. It validates and atomically
-materializes those files with mode `0600` into its own private state at boot;
-there is no manually provisioned credential volume. SGLang
+The production H200 profile uses outbound **direct-signed** count-only metering. The proxy sends an Ed25519-signed meter record over TLS 1.3 to a fixed billing origin. Billing requires a dedicated sealed meter capability and verifies the JWS before settlement. This channel never carries prompts, completions, customer API keys, or entitlements. A separately deployed mTLS meter ingress remains an optional stronger network boundary for a future deployment.
+
+SGLang
 shares the proxy network namespace and binds only `127.0.0.1:30000`; it also
 requires a distinct sealed loopback token. Customer API keys terminate at
 billing and the CVM receives only one-use billing entitlements.

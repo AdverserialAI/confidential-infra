@@ -33,8 +33,7 @@ services:
       - /var/run/dstack.sock:/var/run/dstack.sock:ro
       # Private proxy state. The image pre-creates /state as uid/gid 65532;
       # Docker initializes this named volume from that directory. It holds ACME
-      # state, replay IDs, meter records, and the locally materialized mTLS
-      # client bundle — never model weights, prompts, or GPU evidence.
+      # state, replay IDs, meter records — never model weights, prompts, or GPU evidence.
       - proxy-state:/state
       # Collector output is a separate least-privilege volume. The proxy can
       # read signed GPU evidence but the collector cannot read proxy state.
@@ -69,13 +68,13 @@ services:
       AUTH_REQUIRED: "0"
       CONFIDENTIAL_MODE: "1"
       CONFIDENTIAL_ACTIVATION: ${CONFIDENTIAL_ACTIVATION:-pre-activation}
-      # Meter records leave the CVM only through a dedicated TLS 1.3 mTLS
-      # ingress. The proxy validates this ingress's CA and presents its own
-      # sealed client key; direct delivery to Heroku billing is forbidden.
-      METER_URL: ${METER_URL:?mTLS meter-ingress URL required}
-      # A single sealed base64url JSON value; attest-proxy validates and
-      # atomically writes it under /state/meter-tls with mode 0600.
-      METER_TLS_BUNDLE_B64: ${METER_TLS_BUNDLE_B64:?sealed mTLS client bundle required}
+      # Count-only meter records leave the CVM over outbound TLS 1.3 directly
+      # to billing. Prompts, completions, customer API keys, and entitlements
+      # never use this path. Billing requires the proxy's Ed25519 meter JWS
+      # plus this dedicated sealed capability.
+      METER_DELIVERY_MODE: "direct-signed"
+      METER_URL: "https://billing.adverserial.ai"
+      METER_INGRESS_SHARED_SECRET: ${METER_INGRESS_SHARED_SECRET:?sealed count-only meter capability required}
       ENTITLEMENT_JWKS_JSON: ${ENTITLEMENT_JWKS_JSON:?billing entitlement public JWKS required}
       ENTITLEMENT_ISSUER: "https://billing.adverserial.ai"
       ENTITLEMENT_AUDIENCE: "https://cc-api.adverserial.ai"
