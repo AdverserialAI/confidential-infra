@@ -5,14 +5,30 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 env_file="${ENV_FILE:?set ENV_FILE to an untracked sealed-values file}"
 [ -f "$env_file" ] || { echo "ENV_FILE does not exist" >&2; exit 2; }
-set -a
-# shellcheck disable=SC1090
-. "$env_file"
-set +a
+# Parse dotenv values without evaluating them as shell code. In particular,
+# ENTITLEMENT_JWKS_JSON is intentionally a raw JSON value beginning with `{`;
+# sourcing it would execute/parse it as shell syntax and is both unsafe and
+# incompatible with a valid production entitlement key set.
+while IFS= read -r raw_line || [ -n "$raw_line" ]; do
+  line="${raw_line#"${raw_line%%[![:space:]]*}"}"
+  [ -z "$line" ] && continue
+  [[ "$line" == \#* ]] && continue
+  [[ "$line" == *=* ]] || { echo "invalid dotenv line in sealed env" >&2; exit 2; }
+  name="${line%%=*}"
+  value="${line#*=}"
+  [[ "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || { echo "invalid dotenv variable name" >&2; exit 2; }
+  # Docker's env-file accepts literal values. Preserve them byte-for-byte,
+  # apart from optional surrounding double or single quotes for ordinary
+  # scalar fields; no shell expansion, command substitution, or eval occurs.
+  if [[ ${#value} -ge 2 && ( ( "${value:0:1}" == '"' && "${value: -1}" == '"' ) || ( "${value:0:1}" == "'" && "${value: -1}" == "'" ) ) ]]; then
+    value="${value:1:${#value}-2}"
+  fi
+  export "$name=$value"
+done < "$env_file"
 # COMPOSE_DIGEST is deliberately excluded here: it is the digest emitted below
 # after normalizing its own field to sha256:SELF. This avoids a self-referential
 # hash while still binding every other rendered deployment value.
-for v in ATTEST_PROXY_IMAGE GPU_EVIDENCE_COLLECTOR_IMAGE MODEL_MEASURER_IMAGE SGLANG_LOOPBACK_TOKEN POLICY_ID MODEL_MANIFEST_FILE MODEL_ARTIFACT_PATH RUNTIME_DIGEST ACME_EMAIL GANDI_PAT ENTITLEMENT_JWKS_JSON METER_SIGNING_SEED RECEIPT_SIGNING_SEED METER_DELIVERY_MODE METER_URL METER_INGRESS_SHARED_SECRET NV_ATTESTATION_SERVICE_KEY; do
+for v in ATTEST_PROXY_IMAGE GPU_EVIDENCE_COLLECTOR_IMAGE MODEL_MEASURER_IMAGE SGLANG_LOOPBACK_TOKEN POLICY_ID MODEL_MANIFEST_FILE MODEL_ARTIFACT_PATH RUNTIME_DIGEST ACME_EMAIL GANDI_PAT ENTITLEMENT_JWKS_JSON METER_SIGNING_SEED RECEIPT_SIGNING_SEED METER_DELIVERY_MODE METER_URL METER_INGRESS_SHARED_SECRET NV_ATTESTATION_SERVICE_KEY EHBP_IDENTITY_B64; do
   [ -n "${!v:-}" ] || { echo "missing $v" >&2; exit 2; }
 done
 for image in "$ATTEST_PROXY_IMAGE" "$GPU_EVIDENCE_COLLECTOR_IMAGE" "$MODEL_MEASURER_IMAGE"; do

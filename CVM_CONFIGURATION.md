@@ -101,6 +101,7 @@ running inference service.
 | `METER_URL` | fixed `https://billing.adverserial.ai` origin for signed count-only delivery |
 | `METER_INGRESS_SHARED_SECRET` | sealed dedicated meter capability; billing requires it in addition to a valid proxy Ed25519 JWS |
 | `RECEIPT_SIGNING_SEED` | sealed 32-byte base64url P-256 seed; only the derived public JWK is published in the signed policy |
+| `EHBP_IDENTITY_B64` | sealed base64url JSON identity for the RFC 9180/RFC 9458 EHBP receiver; its public key config is quote-bound and exposed only through verified evidence |
 
 Generate the two local trust-boundary key pairs once, on an administrator
 workstation, without printing them:
@@ -160,6 +161,19 @@ confidential prompt, deploy that change in a staged billing release and set:
 - `CC_ALLOWED_MODELS=lordx64/cyberglm` for the first rollout.
 - `CC_ENTITLEMENT_AUDIENCE=https://cc-api.adverserial.ai` and
   `CC_METER_ISSUER=https://cc-api.adverserial.ai`.
+
+Generate the separate EHBP receiver identity using the released
+[`attest-proxy`](https://github.com/AdverserialAI/attest-proxy) tool. It
+writes a single base64url value to a mode-0600 file and never prints the
+private identity:
+
+```bash
+go run ./cmd/generate-ehbp-identity --out "$HOME/.config/adverserial/ehbp-identity"
+```
+
+Set that value as `EHBP_IDENTITY_B64` in the sealed CVM environment. Its
+private half stays in the CVM; only its RFC 9458 public key config appears in
+fresh attestation evidence and is bound by the TDX quote.
 
 The production H200 profile uses direct-signed count-only delivery and therefore does not require an additional CPU CVM or a public meter endpoint. The proxy opens outbound TLS 1.3 only to the fixed billing origin. It sends a compact Ed25519 JWS containing a reservation ID, request ID, canonical model ID, and token counts. Billing requires both this valid signature and `CC_METER_INGRESS_SHARED_SECRET`, then settles the reservation idempotently. It never receives prompt or completion bytes on this path.
 

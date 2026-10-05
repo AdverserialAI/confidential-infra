@@ -68,6 +68,11 @@ services:
       AUTH_REQUIRED: "0"
       CONFIDENTIAL_MODE: "1"
       CONFIDENTIAL_ACTIVATION: ${CONFIDENTIAL_ACTIVATION:-pre-activation}
+      # RFC 9180 / RFC 9458 encrypted HTTP bodies. The private identity is a
+      # sealed value held only by this TDX CVM; its public key config is bound
+      # into fresh attestation evidence and verified by browser/SDK clients.
+      EHBP_REQUIRED: "1"
+      EHBP_IDENTITY_B64: ${EHBP_IDENTITY_B64:?sealed EHBP receiver identity required}
       # Count-only meter records leave the CVM over outbound TLS 1.3 directly
       # to billing. Prompts, completions, customer API keys, and entitlements
       # never use this path. Billing requires the proxy's Ed25519 meter JWS
