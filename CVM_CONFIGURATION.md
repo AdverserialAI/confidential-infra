@@ -26,12 +26,13 @@ immutable GHCR image digests (proxy and GPU-evidence collector), their GitHub
 build provenance, and SBOM. Put those exact digests in the profile; never use
 a mutable image tag. Publish the matching source release first.
 
-The current `v0.1.0-rc.9` release is pinned in the H200 profile:
+The current `v0.1.0-rc.10` release is pinned in the H200 profile:
 
-- proxy: `ghcr.io/adverserialai/attest-proxy@sha256:f09b38d1d4f9c7cfc50dbe73aa956c445177d9960930ebfcb71c13065fd5fd2b`
-- collector: `ghcr.io/adverserialai/gpu-evidence-collector@sha256:2ce83da72c7117a3b0723e0799a44930a0e0e9d3c77db1f2adca43910dffd6ad`
+- proxy: `ghcr.io/adverserialai/attest-proxy@sha256:309837aed54ad45e2a6222c8d8389d9a748cb9c991406d4833423c0ea8f7578c`
+- collector: `ghcr.io/adverserialai/gpu-evidence-collector@sha256:9e9410515db77d4940a8b63c3604055cf666b9e4bd6590952f4270b5019d0de3`
+- model measurer: `ghcr.io/adverserialai/model-measurer@sha256:45a687a1a890e6a03092068125390c43637cb9d3b0136e8367f0e7479a2bb0ab`
 
-Both were built from the public tag with GitHub provenance and SBOMs. Their
+All three images, including the read-only model measurer, were built from the public tag with GitHub provenance and SBOMs. Their
 immutable manifests have been verified as publicly pullable before this
 configuration was prepared. The final CVM therefore needs no registry token or
 container-registry secret. Do not add credentials for a public immutable image
