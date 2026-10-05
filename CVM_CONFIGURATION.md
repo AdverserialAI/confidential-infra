@@ -118,7 +118,7 @@ redacts sealed values before writing `dist/docker-compose.rendered.yml` and
 prints the `COMPOSE_DIGEST` for that exact configuration. Do not reuse a
 digest generated from the example file.
 
-Keep `CONFIDENTIAL_ACTIVATION=pre-activation` for the evidence-only boot. In this state every inference POST fails before its body is read. Set it to `active` only in the final approved activation change.
+For the single-update production path, set `CONFIDENTIAL_ACTIVATION=active` in the final sealed file, but first set billing's `CC_ALLOWED_MODELS` to an empty value. The proxy can then collect real evidence while billing refuses to issue every confidential entitlement. Do not activate access by changing the CVM again: publish and verify the active policy first, then set `CC_ALLOWED_MODELS=lordx64/cyberglm` in billing. This leaves the raw API key at billing and enables only the canonical CyberGLM model.
 
 Also set the non-secret release bindings: `POLICY_ID`, `MODEL_DIGEST`,
 `RUNTIME_DIGEST`, `COMPOSE_DIGEST`, `CONFIDENTIAL_ACTIVATION`, pinned image digests, `MODEL_ID`,
@@ -185,27 +185,38 @@ proxy's Ed25519 signature, then settles the reservation idempotently.
 
 ## 5. Evidence, policy, and client activation
 
-Before changing a policy status to `active`:
+The single-update activation sequence is deliberately split between the CVM
+and billing:
 
-1. Obtain a fresh nonce-bound Intel TDX quote from the deployed CVM and fresh
-   NVIDIA evidence from the collector.
-2. Use an independent verifier to validate Intel collateral and NVIDIA evidence
-   and check that they bind the **observed** `cc-api` TLS SPKI key.
-3. Publish a release manifest with proxy/runtime/model/config digests, receipt
-   public keys, evidence requirements, SBOM, and GitHub provenance.
-4. Replace the template policy in `AdverserialAI/confidential-policy` with a
-   signed active policy that pins those values; publish matching registry node
-   metadata.
-5. Update `verify.adverserial.ai` from **evidence pending** only after those
-   files are public and independently checkable.
-6. Run the official SDK with hardware verification required. It must reject a
+1. Set billing `CC_ALLOWED_MODELS` to an empty value. Its confidential route
+   then rejects every entitlement request while legacy API and chat traffic are
+   untouched.
+2. Perform the one guarded CVM update with `CONFIDENTIAL_ACTIVATION=active`.
+   No customer can reach inference because billing still issues no entitlement.
+3. Obtain a fresh nonce-bound Intel TDX quote from the deployed CVM and fresh
+   NVIDIA evidence from the collector. Use the independent verifier to validate
+   Intel collateral and NVIDIA evidence and confirm the observed `cc-api` TLS
+   SPKI, receipt key, and event-log configuration binding.
+4. Calculate and publish the canonical model artifact digest, release manifest,
+   SBOM/provenance, and a signed active policy that pins model, runtime image,
+   compose, TLS, and receipt key commitments. Update `verify.adverserial.ai`
+   only after the files are publicly independently checkable.
+5. Run the official SDK with hardware verification required. It must reject a
    missing quote, dev evidence, mismatched TLS key, expired receipt, replayed
    entitlement, incorrect canonical model ID, and failed meter settlement.
+6. Only after all checks pass, set billing
+   `CC_ALLOWED_MODELS=lordx64/cyberglm`. This grants the first usable
+   entitlement without another CVM update.
 
-Set `RUNTIME_DIGEST` to the immutable SGLang runtime image digest. The fresh TDX quote and event log independently bind the complete rendered compose, including that image, at verification time. Do not substitute a host or VM measurement for this field. Keep `CONFIDENTIAL_ACTIVATION=pre-activation` until the deployment has a canonical model artifact digest and its fresh evidence has been independently verified.
+`RUNTIME_DIGEST` is the immutable SGLang runtime image digest. The fresh TDX
+quote and event log independently bind the complete rendered compose, including
+that image, at verification time. Do not substitute a host or VM measurement
+for this field.
 
-Only then deploy `cc-chat` and guide users to `cc-api`. `verify.adverserial.ai` is already deployed as the public registry; its evidence-pending state is intentional until this activation sequence has produced independently verifiable evidence. The existing public
-registry and client documentation intentionally fail closed before this step.
+Only then publish `cc-chat` as the user-facing confidential client and guide
+users to `cc-api`. `verify.adverserial.ai` remains evidence-pending until this
+sequence has produced independently verifiable evidence. The existing public
+registry and client documentation fail closed before that point.
 
 ## 6. One production CVM update
 
