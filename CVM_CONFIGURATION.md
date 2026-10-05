@@ -225,10 +225,13 @@ Model availability is checked through the mounted `/data/cyberglm-fp8` path by
 the model-measurer before attest-proxy can become ready.
 
 After every external prerequisite above has a real value and the rendered
-compose has been reviewed, execute exactly once from this repository:
+compose has been reviewed, save the **exact** last-known-good Phala pre-launch
+script locally. The update command refuses to run without that file so it
+cannot silently replace the working script:
 
 ```bash
 ENV_FILE=/secure/cc-api.production.env \
+PRE_LAUNCH_SCRIPT=/secure/phala-last-known-good-pre-launch.sh \
 CONFIRM_FINAL_CVM_UPDATE=I_UNDERSTAND_THIS_UPDATES_THE_RUNNING_CVM \
 bash scripts/final-cvm-update.sh
 ```

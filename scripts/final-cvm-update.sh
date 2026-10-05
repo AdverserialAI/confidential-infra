@@ -14,6 +14,8 @@ if [[ "$confirmation" != "I_UNDERSTAND_THIS_UPDATES_THE_RUNNING_CVM" ]]; then
 fi
 
 env_file=${ENV_FILE:?Set ENV_FILE to the untracked sealed production environment file.}
+pre_launch_script=${PRE_LAUNCH_SCRIPT:?Set PRE_LAUNCH_SCRIPT to the exact last-known-good Phala pre-launch script.}
+[ -f "$pre_launch_script" ] || { echo "refusing update: PRE_LAUNCH_SCRIPT does not exist" >&2; exit 2; }
 
 cd "$repo_root"
 ENV_FILE="$env_file" bash scripts/prepare-deployment.sh
@@ -45,6 +47,7 @@ phala deploy \
   --no-dev-os \
   --compose docker-compose.yml \
   --env "$env_file" \
+  --pre-launch-script "$pre_launch_script" \
   --no-public-logs \
   --no-public-sysinfo \
   --public-tcbinfo \
