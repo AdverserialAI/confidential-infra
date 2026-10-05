@@ -12,7 +12,7 @@ set +a
 # COMPOSE_DIGEST is deliberately excluded here: it is the digest emitted below
 # after normalizing its own field to sha256:SELF. This avoids a self-referential
 # hash while still binding every other rendered deployment value.
-for v in ATTEST_PROXY_IMAGE GPU_EVIDENCE_COLLECTOR_IMAGE MODEL_MEASURER_IMAGE SGLANG_LOOPBACK_TOKEN POLICY_ID MODEL_MANIFEST_FILE MODEL_ARTIFACT_PATH RUNTIME_DIGEST ACME_EMAIL GANDI_PAT ENTITLEMENT_JWKS_JSON METER_SIGNING_SEED RECEIPT_SIGNING_SEED METER_INGRESS_SHARED_SECRET NV_ATTESTATION_SERVICE_KEY; do
+for v in ATTEST_PROXY_IMAGE GPU_EVIDENCE_COLLECTOR_IMAGE MODEL_MEASURER_IMAGE SGLANG_LOOPBACK_TOKEN POLICY_ID MODEL_MANIFEST_FILE MODEL_ARTIFACT_PATH RUNTIME_DIGEST ACME_EMAIL GANDI_PAT ENTITLEMENT_JWKS_JSON METER_SIGNING_SEED RECEIPT_SIGNING_SEED METER_DELIVERY_MODE METER_URL METER_INGRESS_SHARED_SECRET NV_ATTESTATION_SERVICE_KEY; do
   [ -n "${!v:-}" ] || { echo "missing $v" >&2; exit 2; }
 done
 for image in "$ATTEST_PROXY_IMAGE" "$GPU_EVIDENCE_COLLECTOR_IMAGE" "$MODEL_MEASURER_IMAGE"; do
@@ -22,6 +22,8 @@ done
 [[ "$METER_SIGNING_SEED" != *$'\n'* ]] || { echo "METER_SIGNING_SEED must be one line" >&2; exit 2; }
 [[ "$RECEIPT_SIGNING_SEED" != *$'\n'* ]] || { echo "RECEIPT_SIGNING_SEED must be one line" >&2; exit 2; }
 [[ "$METER_INGRESS_SHARED_SECRET" != *$'\n'* ]] || { echo "METER_INGRESS_SHARED_SECRET must be one line" >&2; exit 2; }
+[[ "$METER_DELIVERY_MODE" == "direct-signed" ]] || { echo "METER_DELIVERY_MODE must be direct-signed for this profile" >&2; exit 2; }
+[[ "$METER_URL" == "https://billing.adverserial.ai" ]] || { echo "METER_URL must be the fixed billing origin for this profile" >&2; exit 2; }
 export COMPOSE_DIGEST="${COMPOSE_DIGEST:-sha256:SELF}"
 mkdir -p dist
 umask 077
