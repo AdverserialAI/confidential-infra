@@ -71,8 +71,9 @@ proxy's shared network namespace, protected by a distinct loopback credential.
 There is no public SGLang port.
 
 At DNS, `cc-api.adverserial.ai` must use Phala’s documented L4/SNI
-TLS-pass-through hostname for port 443 of this CVM. Do not terminate TLS at
-Heroku, Cloudflare, Gandi, a load balancer, or a GPU proxy. The CVM needs
+TLS-pass-through hostname for port 443 of this CVM: `b74e3dde6292cc69bac759b22fc723a299aa8a83-443s.dstack-pha-usc1.phala.network`.
+Do not terminate TLS at Heroku, Cloudflare, Gandi, a load balancer, or a GPU
+proxy. The CVM needs
 outbound access only to the selected ACME CA/DNS API, the container registry,
 the NVIDIA evidence service, immutable policy/source sites, and the dedicated
 `meter-ingress.adverserial.ai` endpoint for count-only delivery. It does not
@@ -207,3 +208,27 @@ For a pre-activation boot, do not invent a `RUNTIME_DIGEST`: retain the explicit
 
 Only then deploy `cc-chat` and guide users to `cc-api`. `verify.adverserial.ai` is already deployed as the public registry; its evidence-pending state is intentional until this activation sequence has produced independently verifiable evidence. The existing public
 registry and client documentation intentionally fail closed before this step.
+
+## 6. One production CVM update
+
+The inherited CVM pre-launch script prunes Docker volumes and is not acceptable
+for this deployment. The checked-in `scripts/cvm-pre-launch.sh` replaces it
+with a read-only check for the existing `cyberglm-data` volume and model path.
+It never prunes, stops, deletes, or mutates model data.
+
+After every external prerequisite above has a real value and the rendered
+compose has been reviewed, execute exactly once from this repository:
+
+```bash
+ENV_FILE=/secure/cc-api.production.env \
+CONFIRM_FINAL_CVM_UPDATE=I_UNDERSTAND_THIS_UPDATES_THE_RUNNING_CVM \
+bash scripts/final-cvm-update.sh
+```
+
+The script verifies that `gpu-tee-cwpu7` is the currently running 8×H200 CVM,
+reruns the redacted render validation, then performs a graceful `phala deploy`
+without `--force-stop`. It disables public logs and system information, keeps
+public TCB information available for independent verification, enables secure
+time, and sends the complete sealed environment plus the immutable compose in
+the same update. It refuses accidental execution without the explicit local
+confirmation string.
