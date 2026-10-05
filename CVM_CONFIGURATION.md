@@ -26,18 +26,16 @@ immutable GHCR image digests (proxy and GPU-evidence collector), their GitHub
 build provenance, and SBOM. Put those exact digests in the profile; never use
 a mutable image tag. Publish the matching source release first.
 
-The current `v0.1.0-rc.7` release is pinned in the H200 profile:
+The current `v0.1.0-rc.9` release is pinned in the H200 profile:
 
-- proxy: `ghcr.io/adverserialai/attest-proxy@sha256:f2f9f6dff2f68405d2db3f115764a9a6d59f18dd916bf30a93c8a882d4df4de8`
-- collector: `ghcr.io/adverserialai/gpu-evidence-collector@sha256:7b2853811da6acb40b3f06903571fb1e32e56a1e869de0ee1989303a3493cf39`
+- proxy: `ghcr.io/adverserialai/attest-proxy@sha256:f09b38d1d4f9c7cfc50dbe73aa956c445177d9960930ebfcb71c13065fd5fd2b`
+- collector: `ghcr.io/adverserialai/gpu-evidence-collector@sha256:2ce83da72c7117a3b0723e0799a44930a0e0e9d3c77db1f2adca43910dffd6ad`
 
-Both were built from the public tag with GitHub provenance and SBOMs. The initial GHCR release-candidate images are private packages. Before any
-CVM compose pull, authenticate the CVM Docker runtime to `ghcr.io` with a
-dedicated read-only Packages token owned by the organization, stored in the
-platform's secret/deployment mechanism. Do not place that token in compose,
-the model volume, or a committed environment file. Alternatively, make the
-packages explicitly public as an intentional release decision; public source
-does not require public images.
+Both were built from the public tag with GitHub provenance and SBOMs. Their
+immutable manifests have been verified as publicly pullable before this
+configuration was prepared. The final CVM therefore needs no registry token or
+container-registry secret. Do not add credentials for a public immutable image
+to compose, the model volume, or the sealed environment.
 
 Prepare a model profile from `profiles/h200-cyberglm.env.example`. Its
 canonical model ID must be `lordx64/cyberglm`. The profile is the place for
@@ -204,7 +202,7 @@ Before changing a policy status to `active`:
    missing quote, dev evidence, mismatched TLS key, expired receipt, replayed
    entitlement, incorrect canonical model ID, and failed meter settlement.
 
-For a pre-activation boot, do not invent a `RUNTIME_DIGEST`: retain the explicit `sha256:REPLACE_AFTER_REAL_TDX_MEASUREMENT` placeholder and keep `CONFIDENTIAL_ACTIVATION=pre-activation`. Obtain fresh evidence first, then publish the independently verified measurement and deploy the final pinned value before activating any policy.
+Set `RUNTIME_DIGEST` to the immutable SGLang runtime image digest. The fresh TDX quote and event log independently bind the complete rendered compose, including that image, at verification time. Do not substitute a host or VM measurement for this field. Keep `CONFIDENTIAL_ACTIVATION=pre-activation` until the deployment has a canonical model artifact digest and its fresh evidence has been independently verified.
 
 Only then deploy `cc-chat` and guide users to `cc-api`. `verify.adverserial.ai` is already deployed as the public registry; its evidence-pending state is intentional until this activation sequence has produced independently verifiable evidence. The existing public
 registry and client documentation intentionally fail closed before this step.
