@@ -57,7 +57,9 @@ services:
     cap_drop: [ALL]
     depends_on:
       - serve
-    cpus: 4.0
+    # dstack's Docker API exposes a 1-CPU create-time quota even on this
+    # 128-vCPU CVM; do not set a Compose CPU limit here. Hashing remains capped
+    # in-process at BACKUP_HASH_WORKERS=2 and this sidecar never receives a GPU.
     mem_limit: 8g
     volumes:
       # The model artifact itself is never writable by the uploader.
