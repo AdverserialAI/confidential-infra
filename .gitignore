@@ -7,3 +7,4 @@ chat-dist/
 *.pem
 *.key
 *.crt
+__pycache__/
