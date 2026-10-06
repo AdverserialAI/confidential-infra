@@ -1,0 +1,80 @@
+# One-time private CyberGLM artifact backup. This is intentionally separate
+# from the final confidential-inference compose: it preserves the currently
+# recovered serving configuration and adds only a constrained uploader.
+#
+# Required sealed variables: SGLANG_API_KEY, HF_TOKEN.
+# HF_TOKEN must have write access only to lordx64/cyberglm-fp8-abliterated.
+services:
+  serve:
+    image: lmsysorg/sglang:latest
+    shm_size: 32gb
+    restart: on-failure
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+    privileged: true
+    ports:
+      - "30000:30000"
+    volumes:
+      - cyberglm-data:/data
+    command: >
+      bash -c 'nvidia-smi -L; exec python -m sglang.launch_server
+      --model-path /data/cyberglm-fp8
+      --served-model-name cyberglm --served-model-name lordx64/cyberglm
+      --api-key $SGLANG_API_KEY
+      --host 0.0.0.0
+      --port 30000
+      --tp 8
+      --trust-remote-code
+      --kv-cache-dtype fp8_e4m3
+      --dsa-prefill-backend flashmla_sparse_q8
+      --dsa-decode-backend flashmla_kv
+      --speculative-algorithm EAGLE
+      --speculative-num-steps 5
+      --speculative-eagle-topk 1
+      --speculative-num-draft-tokens 6
+      --mem-fraction-static 0.8
+      --context-length 1048576
+      --reasoning-parser glm45
+      --tool-call-parser glm47'
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 8
+              capabilities: [gpu]
+
+  backup:
+    # Must be an immutable GHCR digest built from backup/Dockerfile.
+    image: ${BACKUP_IMAGE:?set a digest-pinned backup image}
+    restart: "no"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=512m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    depends_on:
+      - serve
+    cpus: 4.0
+    mem_limit: 8g
+    volumes:
+      # The model artifact itself is never writable by the uploader.
+      - cyberglm-data:/data:ro
+      - backup-state:/state
+    environment:
+      HF_TOKEN: ${HF_TOKEN:?sealed Hugging Face write token required}
+      HF_REPO_ID: lordx64/cyberglm-fp8-abliterated
+      BACKUP_SOURCE: /data/cyberglm-fp8
+      BACKUP_STATE_DIR: /state
+      BACKUP_HASH_WORKERS: "2"
+      BACKUP_WAIT_FOR_URL: http://serve:30000/health
+      BACKUP_WAIT_TIMEOUT_SECONDS: "21600"
+      HF_HUB_ENABLE_HF_TRANSFER: "1"
+      HF_HUB_DISABLE_XET: "1"
+      HF_HOME: /state/huggingface-home
+
+volumes:
+  # Preserve the original Compose-managed model volume name exactly.
+  cyberglm-data:
+  backup-state:

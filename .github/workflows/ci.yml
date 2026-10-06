@@ -10,3 +10,7 @@ jobs:
         run: "grep -R --exclude-dir=.git --exclude-dir=.github --line-number 'set -x' . && exit 1 || true"
       - name: Reject mutable container tags
         run: "grep -R --exclude-dir=.git --exclude-dir=.github --line-number 'image: .*:latest' docker-compose.yml && exit 1 || true"
+      - name: Validate one-shot model backup definition
+        run: |
+          python3 -m py_compile backup/backup.py
+          SGLANG_API_KEY=test-only HF_TOKEN=hf_test_only BACKUP_IMAGE=example.invalid/cyberglm-backup@sha256:$(printf '0%.0s' {1..64}) docker compose -f backup-compose.yml config --quiet
