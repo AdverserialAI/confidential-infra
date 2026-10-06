@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
-from huggingface_hub import HfApi
+from huggingface_hub import HfApi, hf_hub_download
 from huggingface_hub.hf_api import RepoFile
 
 REPO_ID = os.environ.get("HF_REPO_ID", "lordx64/cyberglm-fp8-abliterated")
@@ -85,6 +85,11 @@ def build_manifest(files: list[Path]) -> dict[str, dict[str, int | str]]:
 
 
 def remote_matches(remote_file: RepoFile | None, local: dict[str, int | str]) -> bool:
+    """Fast resume check for LFS files only.
+
+    The Hub exposes a content SHA-256 for LFS objects. Regular Git files are
+    verified by downloading them to the private state volume in verify_remote.
+    """
     return bool(
         remote_file
         and remote_file.size == local["size"]
@@ -106,14 +111,31 @@ def verify_remote(api: HfApi, manifest: dict[str, dict[str, int | str]]) -> None
     failures: list[str] = []
     for path, local in manifest.items():
         remote_file = remote.get(path)
-        if remote_matches(remote_file, local):
-            continue
         if remote_file is None:
             failures.append(f"missing:{path}")
-        elif remote_file.size != local["size"]:
+            continue
+        if remote_file.size != local["size"]:
             failures.append(f"size:{path}")
-        else:
-            failures.append(f"sha256:{path}")
+            continue
+        if remote_file.lfs is not None:
+            if remote_file.lfs.sha256 != local["sha256"]:
+                failures.append(f"sha256:{path}")
+            continue
+
+        # Regular Git files have no LFS SHA. They are necessarily small on the
+        # Hub, but we still hash the downloaded bytes rather than trusting size.
+        try:
+            downloaded = Path(hf_hub_download(
+                repo_id=REPO_ID,
+                filename=path,
+                repo_type="model",
+                token=api.token,
+                cache_dir=str(STATE / "huggingface-cache"),
+            ))
+            if sha256_file(downloaded) != local["sha256"]:
+                failures.append(f"sha256:{path}")
+        except Exception as exc:
+            failures.append(f"download:{path}:{type(exc).__name__}")
     if failures:
         raise SystemExit(f"remote verification failed ({len(failures)}): {failures[:5]}")
 

@@ -6,11 +6,12 @@
 # HF_TOKEN must have write access only to lordx64/cyberglm-fp8-abliterated.
 services:
   serve:
-    image: lmsysorg/sglang:latest
+    image: lmsysorg/sglang@sha256:2dbe4c7f53230b09aaa8fa41891c13c51d9d2e253f486a70822aaf08783fff75
     shm_size: 32gb
     restart: on-failure
     environment:
       NVIDIA_VISIBLE_DEVICES: all
+      SGLANG_API_KEY: ${SGLANG_API_KEY:?sealed SGLang API key required}
     privileged: true
     ports:
       - "30000:30000"
@@ -20,7 +21,7 @@ services:
       bash -c 'nvidia-smi -L; exec python -m sglang.launch_server
       --model-path /data/cyberglm-fp8
       --served-model-name cyberglm --served-model-name lordx64/cyberglm
-      --api-key $SGLANG_API_KEY
+      --api-key $$SGLANG_API_KEY
       --host 0.0.0.0
       --port 30000
       --tp 8
@@ -45,8 +46,8 @@ services:
               capabilities: [gpu]
 
   backup:
-    # Must be an immutable GHCR digest built from backup/Dockerfile.
-    image: ${BACKUP_IMAGE:?set a digest-pinned backup image}
+    # Immutable public GHCR manifest verified before this deployment.
+    image: ghcr.io/adverserialai/cyberglm-backup@sha256:66cb575c96ae6df2662d4831114ae57b0a32742a52bacf2b84796d146c445804
     restart: "no"
     read_only: true
     tmpfs:
