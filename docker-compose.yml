@@ -57,10 +57,13 @@ services:
       RECEIPT_AUDIENCE: "https://cc-chat.adverserial.ai"
       VERIFICATION_URL: "https://verify.adverserial.ai"
       DSTACK_SOCKET: "/var/run/dstack.sock"
-      ACME_DOMAINS: "cc-api.adverserial.ai"
+      ACME_DOMAINS: "cc-api.adverserial.ai,cc-chat.adverserial.ai"
       ACME_EMAIL: ${ACME_EMAIL:?ACME account contact required}
-      GANDI_ZONE: "adverserial.ai"
-      GANDI_PAT: ${GANDI_PAT:?sealed Gandi DNS token required}
+      # DNS moved Gandi -> Cloudflare (2026-10-06). The proxy's ACME DNS-01
+      # provider is Cloudflare; the token needs Edit-zone-DNS on this zone.
+      DNS_PROVIDER: "cloudflare"
+      CLOUDFLARE_ZONE: "adverserial.ai"
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:?sealed Cloudflare DNS token required}
       CERT_DIR: "/state/certificates"
       CORS_ALLOW_ORIGIN: "https://cc-chat.adverserial.ai"
       GPU_EVIDENCE_FILE: "/evidence/gpu-evidence.json"

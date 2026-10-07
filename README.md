@@ -49,7 +49,7 @@ shares the proxy network namespace and binds only `127.0.0.1:30000`; it also
 requires a distinct sealed loopback token. Customer API keys terminate at
 billing and the CVM receives only one-use billing entitlements.
 
-`METER_SIGNING_SEED`, `SGLANG_LOOPBACK_TOKEN`, and `GANDI_PAT` are sealed
+`METER_SIGNING_SEED`, `SGLANG_LOOPBACK_TOKEN`, and `CLOUDFLARE_API_TOKEN` are sealed
 values. `ENTITLEMENT_JWKS_JSON` is public key material, but is included in the
 sealed deployment set to keep the rendered compose self-contained. A
 subsequent real attestation/measurement step is required before publishing a

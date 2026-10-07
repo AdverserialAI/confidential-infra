@@ -93,7 +93,7 @@ running inference service.
 | --- | --- |
 | `SGLANG_LOOPBACK_TOKEN` | random credential used only proxy → loopback SGLang; it is the value passed to SGLang `--api-key` |
 | `METER_SIGNING_SEED` | 32-byte base64url Ed25519 seed for count-only meter events |
-| `GANDI_PAT` | DNS-01 credential restricted to the `adverserial.ai` zone; must be valid through the next renewal and rotated before expiry |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare DNS-01 credential (Edit-zone-DNS) restricted to the `adverserial.ai` zone; must be valid through the next renewal and rotated before expiry |
 | `ACME_EMAIL` | ACME incident/expiry contact |
 | `ENTITLEMENT_JWKS_JSON` | billing entitlement **public** JWK set, still sealed to keep the render self-contained |
 | `NV_ATTESTATION_SERVICE_KEY` | NVIDIA remote-attestation service key used only by the collector; it must not be visible to proxy or SGLang |
@@ -138,7 +138,8 @@ For the existing H200 CVM, use the immutable Phala production GPU image slug
 not use the shorter `dstack-nvidia-0.5.9` display alias; Phala has retired it
 from the image selector.
 
-Use a Gandi token with DNS-01 permissions only. A one-year token is acceptable
+Use a Cloudflare API token (Edit-zone-DNS template) scoped to the zone only. A
+one-year token is acceptable
 only if its scope is minimal and it has an owner/rotation date; a token that
 expires before the next renewal makes certificate renewal fail, but it does
 not expose prompt contents.
