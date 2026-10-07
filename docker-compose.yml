@@ -166,6 +166,9 @@ services:
     image: ${GPU_EVIDENCE_COLLECTOR_IMAGE:?set a pinned collector release image}
     restart: unless-stopped
     read_only: true
+    # The NV attestation SDK writes verifier.log relative to the working
+    # directory; the image WORKDIR is read-only, so run from the tmpfs /tmp.
+    working_dir: /tmp
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=64m
     security_opt:
