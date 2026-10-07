@@ -30,7 +30,7 @@ ENV_FILE=/secure/path/cc-api.env bash scripts/prepare-deployment.sh
 
 This validates required values, refuses unpinned release images, and writes
 `dist/docker-compose.rendered.yml` for review. It does **not** contact Phala,
-dstack, a GPU, Gandi, billing, or production DNS.
+dstack, a GPU, Cloudflare, billing, or production DNS.
 
 The only pre-existing CVM volume is the existing Compose-managed logical volume
 (`cyberglm-data`). Compose resolves its historical project-prefixed Docker name

@@ -63,8 +63,8 @@ flowchart LR
 
 `cc-api.adverserial.ai` is an L4/SNI pass-through address. It forwards
 ciphertext to `attest-proxy` inside the CVM. The TLS private key and HTTP
-termination live there; Heroku, Gandi, the public evidence site, and billing
-must never receive the decrypted inference request.
+termination live there; Heroku, Cloudflare, the public evidence site, and
+billing must never receive the decrypted inference request.
 
 The static chat UI is deliberately outside the CVM. It serves public code only
 and must not proxy prompts. The browser connects directly to the attested API

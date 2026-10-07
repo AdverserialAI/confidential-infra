@@ -3,7 +3,7 @@
 # This file is a deployment contract, not a runnable default. Render it with
 # scripts/prepare-deployment.sh after supplying sealed values and immutable
 # image digests. Do not put keys, model weights, customer API keys, or the
-# Gandi PAT in this repository or in a committed .env file.
+# Cloudflare API token in this repository or in a committed .env file.
 #
 # Trust boundary:
 # - cc-chat.adverserial.ai is an external static browser app. It never proxies
