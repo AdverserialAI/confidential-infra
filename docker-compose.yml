@@ -93,6 +93,19 @@ services:
       METER_AUDIENCE: "https://billing.adverserial.ai"
       METER_OUTBOX_DIR: "/state/meter-outbox"
 
+  # One-shot permission repair: the preserved model volume's files are
+  # root-owned 0600 from the original provisioning, and the least-privilege
+  # measurer cannot read them. This reuses the already-pinned SGLang image,
+  # grants read/traverse to all, and exits. It has no network and no
+  # credentials; the next boots repeat an idempotent no-op chmod.
+  model-perms:
+    image: ${SGLANG_IMAGE:?set a pinned SGLang runtime image}
+    restart: "no"
+    user: "0:0"
+    volumes:
+      - cyberglm-data:/model
+    entrypoint: ["/bin/sh", "-c", "chmod -R a+rX /model && echo model-perms: ok"]
+
   # The measurer sees model weights read-only and writes a deterministic
   # manifest to a dedicated volume. It has no network, credentials, or API.
   model-measurer:
@@ -103,6 +116,9 @@ services:
       - no-new-privileges:true
     cap_drop: [ALL]
     user: "65532:65532"
+    depends_on:
+      model-perms:
+        condition: service_completed_successfully
     volumes:
       - cyberglm-data:/model:ro
       - model-evidence-state:/model-evidence
