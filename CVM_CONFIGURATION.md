@@ -5,19 +5,19 @@ review checklist only: running it changes the CVM and must be approved
 separately. Do not start the confidential listener or publish an active policy
 until every prerequisite below has been verified.
 
-## 0. Keep the current platform unchanged
+## 0. Hostnames after the cutover
 
-The legacy `api.adverserial.ai`, `chat.adverserial.ai`, billing, and GPU proxy
-stay in place. The confidential path uses new names only:
+The confidential path now owns the primary hostnames; the temporary `cc-*`
+names are retired:
 
-- `cc-chat.adverserial.ai`: external static client (no inference proxying).
-- `cc-api.adverserial.ai`: L4/SNI route to port 443 of the CVM; TLS terminates
+- `chat.adverserial.ai`: external static client (no inference proxying).
+- `api.adverserial.ai`: L4/SNI route to port 443 of the CVM; TLS terminates
   only in `attest-proxy`.
 - `verify.adverserial.ai`: public policy, release, and source evidence. It is
   already deployed as a public registry, currently showing the honest
   **evidence pending** state.
 
-Do not point `api.adverserial.ai` or `chat.adverserial.ai` at the CVM.
+Billing (`billing.adverserial.ai`) is unchanged.
 
 ## 1. Release artifacts before the CVM
 
@@ -70,7 +70,7 @@ Expose only TCP 443 from `attest-proxy`. SGLang is `127.0.0.1:30000` in the
 proxy's shared network namespace, protected by a distinct loopback credential.
 There is no public SGLang port.
 
-At DNS, `cc-api.adverserial.ai` must use Phala’s documented L4/SNI
+At DNS, `api.adverserial.ai` must use Phala’s documented L4/SNI
 TLS-pass-through hostname for port 443 of this CVM: `b74e3dde6292cc69bac759b22fc723a299aa8a83-443s.dstack-pha-usc1.phala.network`.
 Do not terminate TLS at Heroku, Cloudflare, Gandi, a load balancer, or a GPU
 proxy. The CVM needs
@@ -160,8 +160,8 @@ confidential prompt, deploy that change in a staged billing release and set:
   capability held only by billing and the CVM proxy. Billing rejects meter
   requests without it before parsing an event, then verifies the JWS.
 - `CC_ALLOWED_MODELS=lordx64/cyberglm` for the first rollout.
-- `CC_ENTITLEMENT_AUDIENCE=https://cc-api.adverserial.ai` and
-  `CC_METER_ISSUER=https://cc-api.adverserial.ai`.
+- `CC_ENTITLEMENT_AUDIENCE=https://api.adverserial.ai` and
+  `CC_METER_ISSUER=https://api.adverserial.ai`.
 
 Generate the separate EHBP receiver identity using the released
 [`attest-proxy`](https://github.com/AdverserialAI/attest-proxy) tool. It
@@ -192,7 +192,7 @@ and billing:
    No customer can reach inference because billing still issues no entitlement.
 3. Obtain a fresh nonce-bound Intel TDX quote from the deployed CVM and fresh
    NVIDIA evidence from the collector. Use the independent verifier to validate
-   Intel collateral and NVIDIA evidence and confirm the observed `cc-api` TLS
+   Intel collateral and NVIDIA evidence and confirm the observed `api` TLS
    SPKI, receipt key, and event-log configuration binding.
 4. Calculate and publish the canonical model artifact digest, release manifest,
    SBOM/provenance, and a signed active policy that pins model, runtime image,
@@ -210,8 +210,8 @@ quote and event log independently bind the complete rendered compose, including
 that image, at verification time. Do not substitute a host or VM measurement
 for this field.
 
-Only then publish `cc-chat` as the user-facing confidential client and guide
-users to `cc-api`. `verify.adverserial.ai` remains evidence-pending until this
+Only then publish `chat` as the user-facing confidential client and guide
+users to `api`. `verify.adverserial.ai` remains evidence-pending until this
 sequence has produced independently verifiable evidence. The existing public
 registry and client documentation fail closed before that point.
 

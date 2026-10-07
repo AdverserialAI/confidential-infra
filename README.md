@@ -18,8 +18,8 @@ evidence against an active signed policy.
 deployable defaults: it requires immutable proxy, GPU-collector, and model-measurer image
 digests, sealed credentials, a published policy identifier, and a measured
 runtime digest. The model digest is generated from the read-only model volume
-inside the CVM before attest-proxy starts. The template does not host `cc-chat`; the static
-browser app is external and connects directly to `cc-api` after verification.
+inside the CVM before attest-proxy starts. The template does not host `chat`; the static
+browser app is external and connects directly to `api` after verification.
 
 Before any CVM change, create an untracked sealed-values file from
 `.env.example` and run:

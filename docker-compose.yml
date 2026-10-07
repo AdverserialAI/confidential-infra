@@ -6,9 +6,9 @@
 # Cloudflare API token in this repository or in a committed .env file.
 #
 # Trust boundary:
-# - cc-chat.adverserial.ai is an external static browser app. It never proxies
+# - chat.adverserial.ai is an external static browser app. It never proxies
 #   prompts and is not a service in this compose file.
-# - cc-api.adverserial.ai terminates TLS only in attest-proxy inside this CVM.
+# - api.adverserial.ai terminates TLS only in attest-proxy inside this CVM.
 # - SGLang shares the proxy network namespace and listens only on 127.0.0.1.
 # - Billing receives signed entitlement/meter metadata; it receives no prompt.
 services:
@@ -44,8 +44,8 @@ services:
       LISTEN_ADDR: ":8443"
       UPSTREAM: "http://127.0.0.1:30000"
       UPSTREAM_BEARER_TOKEN: ${SGLANG_LOOPBACK_TOKEN:?sealed SGLang credential required}
-      PUBLIC_BASE_URL: "https://cc-api.adverserial.ai"
-      ENDPOINT: "https://cc-api.adverserial.ai"
+      PUBLIC_BASE_URL: "https://api.adverserial.ai"
+      ENDPOINT: "https://api.adverserial.ai"
       MODEL_ID: ${MODEL_ID:?canonical publisher/model ID required}
       ATTESTED_MODELS: ${MODEL_ID:?canonical publisher/model ID required}
       POLICY_ID: ${POLICY_ID:?published policy identifier required}
@@ -54,10 +54,10 @@ services:
       MODEL_MANIFEST_FILE: ${MODEL_MANIFEST_FILE:?model artifact manifest path required}
       RUNTIME_DIGEST: ${RUNTIME_DIGEST:?attested runtime digest required}
       RECEIPT_ISSUER: "https://verify.adverserial.ai"
-      RECEIPT_AUDIENCE: "https://cc-chat.adverserial.ai"
+      RECEIPT_AUDIENCE: "https://chat.adverserial.ai"
       VERIFICATION_URL: "https://verify.adverserial.ai"
       DSTACK_SOCKET: "/var/run/dstack.sock"
-      ACME_DOMAINS: "cc-api.adverserial.ai,cc-chat.adverserial.ai"
+      ACME_DOMAINS: "api.adverserial.ai"
       ACME_EMAIL: ${ACME_EMAIL:?ACME account contact required}
       # DNS moved Gandi -> Cloudflare (2026-10-06). The proxy's ACME DNS-01
       # provider is Cloudflare; the token needs Edit-zone-DNS on this zone.
@@ -65,7 +65,7 @@ services:
       CLOUDFLARE_ZONE: "adverserial.ai"
       CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:?sealed Cloudflare DNS token required}
       CERT_DIR: "/state/certificates"
-      CORS_ALLOW_ORIGIN: "https://cc-chat.adverserial.ai"
+      CORS_ALLOW_ORIGIN: "https://chat.adverserial.ai"
       GPU_EVIDENCE_FILE: "/evidence/gpu-evidence.json"
       # Confidential authorization: normal platform keys stop at billing.
       AUTH_REQUIRED: "0"
@@ -85,11 +85,11 @@ services:
       METER_INGRESS_SHARED_SECRET: ${METER_INGRESS_SHARED_SECRET:?sealed count-only meter capability required}
       ENTITLEMENT_JWKS_JSON: ${ENTITLEMENT_JWKS_JSON:?billing entitlement public JWKS required}
       ENTITLEMENT_ISSUER: "https://billing.adverserial.ai"
-      ENTITLEMENT_AUDIENCE: "https://cc-api.adverserial.ai"
+      ENTITLEMENT_AUDIENCE: "https://api.adverserial.ai"
       ENTITLEMENT_REPLAY_DIR: "/state/used-entitlements"
       METER_SIGNING_SEED: ${METER_SIGNING_SEED:?sealed proxy meter seed required}
       RECEIPT_SIGNING_SEED: ${RECEIPT_SIGNING_SEED:?sealed proxy receipt seed required}
-      METER_ISSUER: "https://cc-api.adverserial.ai"
+      METER_ISSUER: "https://api.adverserial.ai"
       METER_AUDIENCE: "https://billing.adverserial.ai"
       METER_OUTBOX_DIR: "/state/meter-outbox"
 

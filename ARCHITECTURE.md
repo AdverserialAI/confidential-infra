@@ -10,7 +10,7 @@ validates it independently, and finds a matching active policy.
 ```mermaid
 flowchart LR
   subgraph device[Customer device]
-    chat[cc-chat.adverserial.ai\nstatic browser client]
+    chat[chat.adverserial.ai\nstatic browser client]
     sdk[Official SDK / signed extension]
     verifier[Independent verifier\npolicy + TDX + NVIDIA evidence]
   end
@@ -61,7 +61,7 @@ flowchart LR
 
 ### Where TLS ends
 
-`cc-api.adverserial.ai` is an L4/SNI pass-through address. It forwards
+`api.adverserial.ai` is an L4/SNI pass-through address. It forwards
 ciphertext to `attest-proxy` inside the CVM. The TLS private key and HTTP
 termination live there; Heroku, Cloudflare, the public evidence site, and
 billing must never receive the decrypted inference request.

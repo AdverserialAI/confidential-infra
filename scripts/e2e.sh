@@ -6,10 +6,10 @@
 # 2. Obtain one freshly verified entitlement from billing (it is single-use).
 # This script never takes a normal sk- API key and cannot substitute for
 # independent TDX/NVIDIA validation.
-# Usage: E2E_ENTITLEMENT='eyJ...' bash scripts/e2e.sh [cc-api-url] [cc-chat-url]
+# Usage: E2E_ENTITLEMENT='eyJ...' bash scripts/e2e.sh [api-url] [chat-url]
 set -euo pipefail
-BASE="${1:-https://cc-api.adverserial.ai}"
-CHAT="${2:-https://cc-chat.adverserial.ai}"
+BASE="${1:-https://api.adverserial.ai}"
+CHAT="${2:-https://chat.adverserial.ai}"
 ENTITLEMENT="${E2E_ENTITLEMENT:?set a fresh billing-issued one-use entitlement}"
 FAIL=0
 check() {
@@ -28,7 +28,7 @@ M=$(curl -fsS -m 30 "$BASE/v1/models")
 printf '%s' "$M" | grep -q 'lordx64/cyberglm'; check $? 'canonical model listed'
 printf '%s' "$M" | grep -q 'confidential_verification'; check $? 'verification metadata injected'
 C=$(curl -sS -m 30 -o /dev/null -w '%{http_code}' "$CHAT/")
-[ "$C" = 200 ]; check $? "cc-chat serves (got $C)"
+[ "$C" = 200 ]; check $? "chat serves (got $C)"
 
 printf '%s\n' '== 3. confidential authorization =='
 CODE=$(curl -sS -m 30 -o /dev/null -w '%{http_code}' -X POST "$BASE/v1/chat/completions" -H 'Content-Type: application/json' -d '{"model":"lordx64/cyberglm","max_tokens":32,"messages":[{"role":"user","content":"hi"}]}')
