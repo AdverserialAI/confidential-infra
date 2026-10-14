@@ -12,9 +12,10 @@ services:
     environment:
       NVIDIA_VISIBLE_DEVICES: all
       SGLANG_API_KEY: ${SGLANG_API_KEY:?sealed SGLang API key required}
-    privileged: true
-    ports:
-      - "30000:30000"
+    # Never publish SGLang: the only consumer is the backup sidecar on the
+    # internal network. A public port here is a completely unmetered,
+    # unattested inference path for the same model.
+    privileged: false
     volumes:
       - cyberglm-data:/data
     command: >

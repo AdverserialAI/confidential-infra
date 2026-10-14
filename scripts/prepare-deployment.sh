@@ -58,10 +58,21 @@ raw = Path(sys.argv[1]).read_text()
 for name in (
     "SGLANG_LOOPBACK_TOKEN", "CLOUDFLARE_API_TOKEN", "ENTITLEMENT_JWKS_JSON",
     "METER_SIGNING_SEED", "RECEIPT_SIGNING_SEED", "METER_INGRESS_SHARED_SECRET", "NV_ATTESTATION_SERVICE_KEY",
+    "EHBP_IDENTITY_B64",
 ):
     value = os.environ.get(name, "")
     if value:
         raw = raw.replace(value, f"REDACTED_{name}")
+# Self-check: if any sealed value survives anywhere in the artifact, refuse to
+# write it. The review artifact is meant for sharing; a missed redaction leaks
+# live key material (rc.21: EHBP_IDENTITY_B64 was missing from the list).
+leaked = [name for name in (
+    "SGLANG_LOOPBACK_TOKEN", "CLOUDFLARE_API_TOKEN", "ENTITLEMENT_JWKS_JSON",
+    "METER_SIGNING_SEED", "RECEIPT_SIGNING_SEED", "METER_INGRESS_SHARED_SECRET", "NV_ATTESTATION_SERVICE_KEY",
+    "EHBP_IDENTITY_B64",
+) if os.environ.get(name) and os.environ[name] in raw]
+if leaked:
+    raise SystemExit(f"refusing to write artifact: unredacted secrets present: {', '.join(leaked)}")
 path = Path(sys.argv[2])
 path.write_text(raw)
 data = raw

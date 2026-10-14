@@ -17,6 +17,9 @@ services:
     # ghcr.io/adverserialai/attest-proxy@sha256:<release-digest>
     image: ${ATTEST_PROXY_IMAGE:?set a pinned attest-proxy release image}
     restart: unless-stopped
+    # Give the proxy its full 10s graceful-shutdown budget (in-flight SSE
+    # streams) instead of Docker's default 10s-then-SIGKILL.
+    stop_grace_period: 30s
     depends_on:
       model-measurer:
         condition: service_completed_successfully
