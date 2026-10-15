@@ -71,3 +71,9 @@ digests into the sealed values file; never use a mutable tag in the compose.
 ## Security
 
 Please report security vulnerabilities privately to [security@adverserial.ai](mailto:security@adverserial.ai). Do not open a public issue for a suspected vulnerability.
+
+## License
+
+This repository is source-available proprietary software owned by Adverserial
+AI LLC. See [`LICENSE`](./LICENSE) and [`LICENSING.md`](./LICENSING.md).
+Third-party components retain their own terms.
