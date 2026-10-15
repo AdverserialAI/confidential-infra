@@ -28,9 +28,15 @@ Before any CVM change, create an untracked sealed-values file from
 ENV_FILE=/secure/path/cc-api.env bash scripts/prepare-deployment.sh
 ```
 
-This validates required values, refuses unpinned release images, and writes
-`dist/docker-compose.rendered.yml` for review. It does **not** contact Phala,
-dstack, a GPU, Cloudflare, billing, or production DNS.
+Set the printed `deployment_configuration_digest` as `COMPOSE_DIGEST` in the same sealed file and render again before using the guarded update. `SGLANG_MAX_RUNNING_REQUESTS` is a dedicated 1–8 admission cap for this profile; do not put it, or any routing/authentication/model identity flag, in `SGLANG_MODEL_OPTIONS`.
+
+This validates required values, refuses mutable or mismatched runtime images,
+blocks profile flags that could override loopback authentication, model
+identity, routing, or the admission limit, and writes
+`dist/docker-compose.rendered.yml` for review. It fingerprints every sealed
+value in the emitted deployment digest without writing those values to the
+review artifact. It does **not** contact Phala, dstack, a GPU, Cloudflare,
+billing, or production DNS.
 
 The only pre-existing CVM volume is the existing Compose-managed logical volume
 (`cyberglm-data`). Compose resolves its historical project-prefixed Docker name

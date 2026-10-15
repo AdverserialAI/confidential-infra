@@ -17,7 +17,9 @@ services:
     # unattested inference path for the same model.
     privileged: false
     volumes:
-      - cyberglm-data:/data
+      # This one-shot server uses model-supplied code for inference health
+      # checks. It must never be able to alter the only recovered model copy.
+      - cyberglm-data:/data:ro
     command: >
       bash -c 'nvidia-smi -L; exec python -m sglang.launch_server
       --model-path /data/cyberglm-fp8

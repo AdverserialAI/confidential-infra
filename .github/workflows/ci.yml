@@ -5,7 +5,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Reject shell trace logging
         run: "grep -R --exclude-dir=.git --exclude-dir=.github --line-number 'set -x' . && exit 1 || true"
       - name: Reject mutable container tags
@@ -14,3 +14,5 @@ jobs:
         run: |
           python3 -m py_compile backup/backup.py
           SGLANG_API_KEY=test-only HF_TOKEN=hf_test_only BACKUP_IMAGE=example.invalid/cyberglm-backup@sha256:$(printf '0%.0s' {1..64}) docker compose -f backup-compose.yml config --quiet
+      - name: Validate fail-closed confidential deployment render
+        run: bash scripts/test-prepare-deployment.sh

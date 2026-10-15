@@ -104,6 +104,10 @@ services:
   model-perms:
     image: ${SGLANG_IMAGE:?set a pinned SGLang runtime image}
     restart: "no"
+    # This short-lived root helper only changes permissions on the mounted
+    # model volume. It has no credentials or network path.
+    read_only: true
+    network_mode: "none"
     user: "0:0"
     volumes:
       - cyberglm-data:/model
@@ -115,6 +119,7 @@ services:
     image: ${MODEL_MEASURER_IMAGE:?set a pinned model-measurer release image}
     restart: "no"
     read_only: true
+    network_mode: "none"
     security_opt:
       - no-new-privileges:true
     cap_drop: [ALL]
@@ -152,6 +157,7 @@ services:
       --tp ${SGLANG_TP_SIZE:?tensor-parallel size required}
       --mem-fraction-static ${SGLANG_MEM_FRACTION:?memory fraction required}
       --context-length ${SGLANG_CONTEXT_LENGTH:?context length required}
+      --max-running-requests ${SGLANG_MAX_RUNNING_REQUESTS:?admission limit required}
       ${SGLANG_MODEL_OPTIONS:-}
     deploy:
       resources:

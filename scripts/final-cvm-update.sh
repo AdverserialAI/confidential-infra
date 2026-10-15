@@ -18,7 +18,17 @@ pre_launch_script=${PRE_LAUNCH_SCRIPT:?Set PRE_LAUNCH_SCRIPT to the exact last-k
 [ -f "$pre_launch_script" ] || { echo "refusing update: PRE_LAUNCH_SCRIPT does not exist" >&2; exit 2; }
 
 cd "$repo_root"
-ENV_FILE="$env_file" bash scripts/prepare-deployment.sh
+# The deployment contract must be committed and reviewed. Do not send a
+# locally modified compose or preflight script to the long-running CVM.
+if ! git diff --quiet -- docker-compose.yml scripts/prepare-deployment.sh || ! git diff --cached --quiet -- docker-compose.yml scripts/prepare-deployment.sh; then
+  echo "refusing update: commit the reviewed compose and preflight changes first" >&2
+  exit 2
+fi
+
+# A render can first print the expected digest for review. The actual update
+# must use that exact value, so the value attested by the proxy cannot be a
+# stale digest or the self-placeholder.
+REQUIRE_COMPOSE_DIGEST_MATCH=1 ENV_FILE="$env_file" bash scripts/prepare-deployment.sh
 
 # Ensure this is the expected live 8xH200 CVM before Phala receives any update.
 cvm_json=$(phala cvms get "$expected_cvm" --json)

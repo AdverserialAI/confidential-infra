@@ -26,11 +26,11 @@ immutable GHCR image digests (proxy and GPU-evidence collector), their GitHub
 build provenance, and SBOM. Put those exact digests in the profile; never use
 a mutable image tag. Publish the matching source release first.
 
-The current `v0.1.0-rc.11` release is pinned in the H200 profile:
+The current source profile pins the **pre-activation** `v0.1.0-rc.24` release candidate. It is not an authorization to deploy or to claim an active runtime; publish independently verified runtime evidence before activation:
 
-- proxy: `ghcr.io/adverserialai/attest-proxy@sha256:feffcfc7e2fd9f5843341205355955961be68d1647d1f360feb854ded6ef0522`
-- collector: `ghcr.io/adverserialai/gpu-evidence-collector@sha256:8fb8bcae0ec83b07452344b6350d8657e2a12e7bcd7a575a76ad06002496b17b`
-- model measurer: `ghcr.io/adverserialai/model-measurer@sha256:cd8eac2c773f9ef027cd9909f856b4cf57bcefdfa3b4880eaeb2e9217ee8358c`
+- proxy: `ghcr.io/adverserialai/attest-proxy@sha256:96970a38e0d305d502459e69766c72f5fbdb0f6257dc5737a562287732838587`
+- collector: `ghcr.io/adverserialai/gpu-evidence-collector@sha256:46addca873922b51f95226b2fb44eb3e5aea298bf0a295d1ea62ee20ada34bfd`
+- model measurer: `ghcr.io/adverserialai/model-measurer@sha256:c459e8f3f5d6fcb662ec7a471c02e6f6af27074e6253ff60774afa6487a95f20`
 
 All three images, including the read-only model measurer, were built from the public tag with GitHub provenance and SBOMs. Their
 immutable manifests have been verified as publicly pullable before this
@@ -118,16 +118,14 @@ The script refuses to overwrite a file and creates it with mode `0600`.
 
 After you prepare the complete sealed file, run
 `ENV_FILE=/secure/path/cc-api.env bash scripts/prepare-deployment.sh`. It
-redacts sealed values before writing `dist/docker-compose.rendered.yml` and
-prints the `COMPOSE_DIGEST` for that exact configuration. Do not reuse a
-digest generated from the example file.
+redacts sealed values before writing `dist/docker-compose.rendered.yml`, fingerprints each sealed value inside the emitted digest without disclosing it, and prints the `COMPOSE_DIGEST` for that exact configuration. Copy that value into the same sealed file and render again. The guarded update rejects the `sha256:SELF` placeholder, a stale digest, mutable images, and a `RUNTIME_DIGEST` that does not exactly match `SGLANG_IMAGE`. Do not reuse a digest generated from the example file.
 
 For the single-update production path, set `CONFIDENTIAL_ACTIVATION=active` in the final sealed file, but first set billing's `CC_ALLOWED_MODELS` to an empty value. The proxy can then collect real evidence while billing refuses to issue every confidential entitlement. Do not activate access by changing the CVM again: publish and verify the active policy first, then set `CC_ALLOWED_MODELS=lordx64/cyberglm` in billing. This leaves the raw API key at billing and enables only the canonical CyberGLM model.
 
 Also set the non-secret release bindings: `POLICY_ID`, `MODEL_MANIFEST_FILE`,
 `RUNTIME_DIGEST`, `COMPOSE_DIGEST`, `CONFIDENTIAL_ACTIVATION`, pinned image digests, `MODEL_ID`,
-`SGLANG_MODEL_PATH`, `SGLANG_TP_SIZE`, `GPU_COUNT`,
-`GPU_EVIDENCE_EXPECTED_TYPE`, and `SGLANG_CONTEXT_LENGTH`. Set
+`SGLANG_MODEL_PATH`, `SGLANG_TP_SIZE`, `SGLANG_MAX_RUNNING_REQUESTS`, `GPU_COUNT`,
+`GPU_EVIDENCE_EXPECTED_TYPE`, and `SGLANG_CONTEXT_LENGTH`. `SGLANG_MAX_RUNNING_REQUESTS` is a dedicated 1–8 admission cap; do not put it, or loopback/authentication/model identity flags, in `SGLANG_MODEL_OPTIONS`. Set
 `NV_ATTESTATION_SERVICE_KEY` only in the sealed environment: it is a service
 credential, not a public release binding. The collector fails closed unless
 NVIDIA returns at least `GPU_COUNT` independently attested EATs.
