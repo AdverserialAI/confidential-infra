@@ -225,18 +225,20 @@ the model-measurer before attest-proxy can become ready.
 
 After every external prerequisite above has a real value and the rendered
 compose has been reviewed, save the **exact** last-known-good Phala pre-launch
-script locally. The update command refuses to run without that file so it
-cannot silently replace the working script:
+script locally and record its SHA-256. The update command refuses to run unless
+that exact file matches the reviewed hash, so it cannot silently replace the
+working script:
 
 ```bash
 ENV_FILE=/secure/cc-api.production.env \
 PRE_LAUNCH_SCRIPT=/secure/phala-last-known-good-pre-launch.sh \
+PRE_LAUNCH_SCRIPT_SHA256="sha256:$(shasum -a 256 /secure/phala-last-known-good-pre-launch.sh | awk '{print $1}')" \
 CONFIRM_FINAL_CVM_UPDATE=I_UNDERSTAND_THIS_UPDATES_THE_RUNNING_CVM \
 bash scripts/final-cvm-update.sh
 ```
 
-The script verifies that `gpu-tee-cwpu7` is the currently running 8×H200 CVM,
-reruns the redacted render validation, then performs a graceful `phala deploy`
+The script verifies the exact SHA-256 of the reviewed pre-launch script, confirms that `gpu-tee-cwpu7` is the currently running 8×H200 CVM,
+reruns the redacted render validation with an exact `COMPOSE_DIGEST`, then performs a graceful `phala deploy`
 without `--force-stop`. It disables public logs and system information, keeps
 public TCB information available for independent verification, enables secure
 time, and sends the complete sealed environment plus the immutable compose in

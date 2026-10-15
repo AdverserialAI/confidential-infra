@@ -15,7 +15,17 @@ fi
 
 env_file=${ENV_FILE:?Set ENV_FILE to the untracked sealed production environment file.}
 pre_launch_script=${PRE_LAUNCH_SCRIPT:?Set PRE_LAUNCH_SCRIPT to the exact last-known-good Phala pre-launch script.}
+pre_launch_script_sha256=${PRE_LAUNCH_SCRIPT_SHA256:?Set PRE_LAUNCH_SCRIPT_SHA256 to the exact SHA-256 of the reviewed pre-launch script.}
 [ -f "$pre_launch_script" ] || { echo "refusing update: PRE_LAUNCH_SCRIPT does not exist" >&2; exit 2; }
+[[ "$pre_launch_script_sha256" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "refusing update: PRE_LAUNCH_SCRIPT_SHA256 must be sha256:<64 lowercase hex characters>" >&2; exit 2; }
+actual_pre_launch_sha256="$(python3 - "$pre_launch_script" <<'PY'
+import hashlib
+import sys
+from pathlib import Path
+print("sha256:" + hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest())
+PY
+)"
+[[ "$actual_pre_launch_sha256" == "$pre_launch_script_sha256" ]] || { echo "refusing update: PRE_LAUNCH_SCRIPT_SHA256 does not match PRE_LAUNCH_SCRIPT" >&2; exit 2; }
 
 cd "$repo_root"
 # The deployment contract must be committed and reviewed. Do not send a
