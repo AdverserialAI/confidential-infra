@@ -57,7 +57,9 @@ PY
 # compose and complete sealed environment are supplied together. The historical
 # Compose-managed model volume is resolved by Compose itself; no bare Docker-volume
 # check runs before Compose. public-tcbinfo
-# remains available for independent attestation; logs and host sysinfo do not.
+# remains available for independent attestation. Public logs are ON (owner
+# decision 2026-10-17: crash forensics beat the secrecy of "no logs" — the
+# proxy's request logging is content-free and SGLang never prints prompts).
 # The image uses its immutable published slug: the dashboard's shorter display
 # alias was retired even though this production GPU image remains available.
 phala deploy \
@@ -68,7 +70,7 @@ phala deploy \
   --compose docker-compose.yml \
   --env "$env_file" \
   --pre-launch-script "$pre_launch_script" \
-  --no-public-logs \
+  --public-logs \
   --no-public-sysinfo \
   --public-tcbinfo \
   --secure-time \
