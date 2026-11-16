@@ -1,0 +1,50 @@
+name: Build Q2 native converter
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/vllm-q2-native-migration]
+    paths:
+      - .github/workflows/build-q2-native-converter.yml
+      - docker/q2-native-converter/**
+      - scripts/*q2-native*
+      - scripts/prepare-native-builder-context.py
+      - profiles/cyberseek-q2_2-native-plan.json
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      IMAGE: ghcr.io/adverserialai/q2-native-converter
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Assemble explicit safe-file build context
+        run: >-
+          python3 scripts/prepare-native-builder-context.py
+          --compact-plan profiles/cyberseek-q2_2-native-plan.json
+          --output "$RUNNER_TEMP/q2-native-converter"
+      - name: Build pinned Linux image and run artifact tests
+        run: >-
+          docker build --platform linux/amd64
+          --label "org.opencontainers.image.revision=$GITHUB_SHA"
+          --label "org.opencontainers.image.source=https://github.com/AdverserialAI/confidential-infra"
+          -t "$IMAGE:$GITHUB_SHA" "$RUNNER_TEMP/q2-native-converter"
+      - name: Validate restricted runtime startup
+        run: >-
+          docker run --rm --network none --read-only --cap-drop ALL
+          --security-opt no-new-privileges:true "$IMAGE:$GITHUB_SHA" --help
+      - name: Authenticate image publication
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: Publish immutable image reference
+        run: |
+          docker push "$IMAGE:$GITHUB_SHA"
+          docker image inspect "$IMAGE:$GITHUB_SHA" --format '{{range .RepoDigests}}{{println .}}{{end}}' >> "$GITHUB_STEP_SUMMARY"
