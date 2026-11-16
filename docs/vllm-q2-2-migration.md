@@ -1,10 +1,12 @@
 # Huihui Q2_2 to vLLM: implementation and acceptance plan
 
 Status, November 16, 2026: migration preparation, **not deployed or GPU tested**.
-The owner authorizes normal updates of the existing 8×H200 Phala GPU CVM for
-this migration without another approval prompt. Never stop, shut down, delete,
-force-stop or remove the on-demand rental. Preserve recovery configuration and
-weights; recover through an ordinary guarded update if necessary.
+Current supervision instructions require leaving the existing 8×H200 CVM
+unchanged. The current workspace AGENTS.md requires explicit approval before
+any CVM change. Preparation and read-only inspection may continue; an update
+must wait for explicit owner approval. Never stop, shut down, delete, force-stop
+or remove the on-demand rental. Preserve recovery configuration and weights;
+any later recovery must also use an approved ordinary guarded update.
 
 ## Required outcome
 
@@ -53,8 +55,10 @@ CyberSeek artifact or the unmodified DeepSeek model:
 - Candidate native reference: `deepseek-ai/DeepSeek-V4.1-Flash-1017`, revision
   `08c8657f02291e11b6f6b63e0e16014f8e748518`.
 - Candidate vLLM: v0.33.0, source commit
-  `4ba787ec9959e566d3b587a796dff07673324da5`; image digest and flags must be
-  independently revalidated before a deployment candidate is accepted.
+  `4ba787ec9959e566d3b587a796dff07673324da5`; reviewed AMD64 image
+  `vllm/vllm-openai@sha256:91ee972ab751fb7180bc71c175865e36b091686600dca783d52b2511399810b3`.
+  OCI version/source/revision labels match this release. This is metadata
+  verification, not confidential H200 execution or a performance result.
 
 Header inventory covers all seven GGUF parts and 1,043 tensors. The patch scope
 contains 54 projection tensors: attention output, shared-expert down and routed
@@ -95,7 +99,8 @@ rather than depending on file iteration order to select patched values.
    outside sensitive prompt paths and never publish private weights. Account
    for existing model, staging, new outputs, runtime images and safety margin;
    local workstation disk is insufficient for a full checkpoint.
-6. Submit only a guarded ordinary CVM update with `allow_force_stop=false`.
+6. After explicit approval, submit only a guarded ordinary CVM update with
+   `allow_force_stop=false`.
    Inspect ambiguous outcomes; never stack updates or restart a slow update.
 7. Validate memory, model readiness, behavior, first-token latency, decode and
    total throughput, increasing concurrency and context, streaming, tools,
@@ -115,7 +120,7 @@ rather than depending on file iteration order to select patched values.
   coverage and shape/encoding plan; no payload conversion or cloud mutation.
 - `scripts/q2-native-quant.py`: CPU primitives using the exact serving GGUF
   decoders, lossless MXFP4 repacking, native MXFP4/block-FP8 encoding and error
-  metrics. These are building blocks, not a completed checkpoint converter.
+  metrics. The streaming converter uses these primitives.
 
 Five inventory tests, three projection-plan tests and four numeric tests pass.
 Numeric fixtures cover every selected GGML type (Q8_0, Q6_K, IQ3_XXS, IQ3_S,
@@ -123,9 +128,59 @@ MXFP4), exact MXFP4 code/scale preservation, finite-value checks and FP4 tie
 handling. Synthetic numeric tests do not replace real patched-weight checks,
 model-quality comparisons or H200 execution.
 
-The full streaming converter, real patched samples, GPU execution and all
-end-to-end acceptance gates remain incomplete. No CVM mutation has been made
-as part of this vLLM preparation at this checkpoint.
+`scripts/reconstruct-q2-native.py` now implements the full streaming conversion
+path: verify the original measured source tree, download immutable native
+shards with pinned checksums, replace the selected payloads and scales, and
+commit each complete shard atomically. Resume revalidates completed shards and
+rejects untracked output. Source and output trees must be distinct. No full
+checkpoint has been reconstructed yet.
+
+Five bounded real public Q2_2 samples passed the encoding checks. Dense Q8/Q6
+to block FP8 relative RMS was about 2.1%; IQ3 routed-expert to native MXFP4 was
+about 10.8–11.3%; the MXFP4 sample repack was exact. These are additional
+quantization errors on the tested projection samples, not whole-model quality
+scores or proof of equivalent behavior.
+
+The converter was built from commit
+`676a17c4b8719fc7050cff9ee9359150955c2d3b` in an isolated Linux/AMD64 CI job:
+[build and tests](https://github.com/AdverserialAI/confidential-infra/actions/runs/43790758820).
+Four numeric tests and five reconstruction/integrity tests passed inside the
+image, together with a read-only, network-disabled startup check. Its public,
+code-only package is:
+
+`ghcr.io/adverserialai/q2-native-converter@sha256:0309127f824ab7c472f3ffeb66361e73d7b571bb1272f344bf90613fe55682fe`
+
+The anonymous registry manifest digest was independently checked. The public
+native download manifest pins 84 files, including 48 weight shards, totaling
+510,311,062,017 bytes. No weights or credentials are in the converter image.
+
+## Isolated staging preparation
+
+`scripts/prepare-vllm-stage.py` prepares a private candidate locally. It adds:
+
+- A CPU-only converter with 8 CPU and 16 GiB limits, active model and evidence
+  volumes mounted read-only, and a separate native output volume.
+- An eight-rank communication preflight using the exact vLLM image. It sends
+  only small synthetic tensors over loopback, with no model, prompts, secrets
+  or external network. The proposed NCCL host-transfer settings must be tested
+  on the confidential H200 topology; a new engine does not prove P2P support.
+
+Both wait for the existing capacity observer to finish. The preparer verifies
+that the active serving arguments and all unrelated settings remain identical,
+except the deployment digest needed to bind the reviewed additions. It does
+not call a cloud API. `scripts/test-vllm-stage-preparation.py` covers those
+preservation checks and rejected configuration/image changes.
+
+The staged candidate still uses the current llama.cpp server. Conversion and
+GPU communication have **not run** on the CVM; no staged update has been
+submitted. The later serving switch needs a separately reviewed configuration,
+fresh measurements and policy bindings. Do not publish pins from provider
+claims alone or bypass existing ACK checks during either transition.
+
+Current baseline independently passes pinned hardware attestation and two
+bounded encrypted sessions with verified signed receipts. Performance remains
+unacceptable. Full 64×1M occupancy/recall, whole-model behavior, maximum output,
+tenant isolation and downstream launch gates remain open.
 
 ## Primary references
 
