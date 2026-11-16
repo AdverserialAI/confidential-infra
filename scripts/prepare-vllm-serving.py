@@ -15,7 +15,9 @@ import re
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-STAGE_SHA256 = '9c8455bd7ee1134f87277c72aaa92c6d493e44c2adf4ac4abfe9c76813f1ae0a'
+# Only the reviewed CPU-corrected staging candidate is a valid future input.
+# This local pin grants no staging recovery or serving-switch authorization.
+STAGE_SHA256 = '313355e984ff088cb0e7b658b66178cfec4211111e9c04787cac073058128fd8'
 PROFILE_SHA256 = 'e1b5a5d6630771e8e28fdb1954b1a00a54efe2e90015505370555440f0ad5b7c'
 CONVERTER = 'ghcr.io/adverserialai/q2-native-converter@sha256:0309127f824ab7c472f3ffeb66361e73d7b571bb1272f344bf90613fe55682fe'
 spec = importlib.util.spec_from_file_location('context_update', Path(__file__).with_name('prepare-llama-context-update.py'))

@@ -229,11 +229,44 @@ The guarded ordinary update now has a narrow `--reviewed-startup-error` path.
 It still defaults to read-only and requires separate explicit owner approval
 before `--apply`. The opt-in requires the exact failed baseline, diagnosed
 container-startup error, no active operation, unchanged on-demand rental,
-KMS and app identity; any other state is rejected. It only uses the ordinary
+KMS, app identity and reported CPU/RAM/disk/GPU resource configuration; any
+other state is rejected. It only uses the ordinary
 PATCH with `allow_force_stop=false`, never stop/start/restart/delete. The
 initial staging approval does not authorize this additional update or the
 future serving switch. Tests cover rejected states and preservation boundaries;
 they do not prove a provider will accept an update from its current error state.
+
+### Provider stopped state and resource discrepancy
+
+At 11:00 UTC the provider status changed from `error` to `stopped`, still
+with no active operation and the original staging Compose unchanged. The
+guest is offline and reports the previous container-startup failure. The
+rental order separately reports `active`/`on_demand`, with no completion,
+cancellation or decoupling timestamp. Neither the active order nor retained
+node metadata proves physical GPU allocation. No stop, shutdown, restart,
+delete or rental-removal call was issued. The correction guard rejects this
+new stopped state; its earlier error-state preflight is no longer valid.
+
+The current and both saved pre-update/error baselines consistently report
+128 vCPUs and 1,536 GB RAM. Therefore the provider resource metadata does not
+show a resize to one CPU. Docker's one-CPU creation check and the provider's
+configured resource metadata disagree; the underlying guest/daemon cause
+remains unverified. Removing the unnecessary converter quota addresses the
+observed validation rejection, but does not prove runtime CPU performance.
+
+`scripts/observe-cvm-allocation.mjs` records only allowlisted resource and
+rental metadata through authenticated read-only calls; it prints no Compose,
+keys, account data or raw traces. Run it with `--sdk` and a sanitized `--report`
+path. The ordinary update guard now rejects changed or unavailable reported
+hardware allocation, and tests cover CPU/RAM/disk/GPU/type changes. These
+checks do not authorize recovery from stopped state or claim GPU readiness.
+
+The future serving generator now accepts the reviewed CPU-corrected staging
+SHA `313355e984ff...` instead of the failed quota-bearing input. A private
+regeneration produces the same already reviewed future serving candidate
+SHA `845b1c15d53f...`: the native startup, security and engine configuration
+is unchanged. Neither this regeneration nor source tests approve deployment,
+prove artifact conversion or establish the requested performance/capacity.
 
 ## Primary references
 

@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { allowedUpdateState } from './phala-update-state.mjs';
+import { allowedUpdateState, sameResourceAllocation } from './phala-update-state.mjs';
 
 const args = process.argv.slice(2);
 const apply = args.includes('--apply');
@@ -69,11 +69,14 @@ try {
   // still requires fresh explicit owner approval of the exact correction.
   const stats = reviewedStartupError ? await safeGetCvmStats(client, {id: cvm.id}) : null;
   if (!allowedUpdateState(cvm, report, stats?.success ? stats.data : null, reviewedStartupError)) {
-    fail('Existing CVM operation has not finished; no update submitted');
+    fail('Current CVM state does not match reviewed update preconditions; no update submitted');
   }
   if (cvm.public_logs !== true) fail('Diagnostic log activation has not completed');
   if (cvm.project_type !== baseline.project_type || cvm.kms_type !== baseline.kms_type) {
     fail('Rental or KMS configuration changed');
+  }
+  if (!sameResourceAllocation(cvm.resource, baseline.resource)) {
+    fail('Reported hardware allocation changed or unavailable; no update submitted');
   }
   if (hash(cvm.compose_file.docker_compose_file) !== report.source_sha256) {
     fail('Live Docker Compose changed; review again before updating');
@@ -95,6 +98,7 @@ try {
     prepared_sha256: report.prepared_sha256,
     reviewed_startup_error_correction: reviewedStartupError,
     provider_status: cvm.status,
+    reported_hardware_allocation_preserved: true,
     mode: apply ? 'apply' : 'read-only-preflight',
     update_submitted: false,
   };
@@ -130,8 +134,9 @@ try {
     'Unexpected reviewed capacity', 'Unexpected reviewed model', 'Unexpected rental or KMS type',
     'Unexpected cloud API authority', 'Could not read current CVM; no update submitted',
     'CVM identity changed; no update submitted',
-    'Existing CVM operation has not finished; no update submitted',
+    'Current CVM state does not match reviewed update preconditions; no update submitted',
     'Diagnostic log activation has not completed', 'Rental or KMS configuration changed',
+    'Reported hardware allocation changed or unavailable; no update submitted',
     'Live Docker Compose changed; review again before updating',
     'Live app configuration changed; review again before updating',
     'Update acceptance unconfirmed; inspect provider state before any retry',
