@@ -228,3 +228,49 @@ representative short prompts and near-1M independent recall tests. Full 64x1M
 occupancy is a separate workload and cannot be inferred from those flags or
 small probes. Prefix-cache isolation, artifact behavior, streaming, tools,
 cancellation, output bounds, signed receipts and metering must all pass.
+
+## Future serving candidate preparation
+
+`scripts/prepare-vllm-serving.py` now makes a concrete private serving candidate
+from the exact reviewed staging Compose, without calling a cloud API. It
+preserves proxy keys, encrypted-body requirements, metering, independent GPU
+evidence and recovery volumes. The original GGUF builder/permissions jobs
+become explicit `recovery-only` profile jobs; the old startup dependency chain
+is not reused for the native engine.
+
+The new startup graph is:
+
+1. The pinned model-measurer reads the completed native model volume read-only
+   and writes a separate `native-manifest.json` on the evidence volume.
+2. `scripts/check-native-artifact.py`, embedded in the existing converter-image
+   service slot, validates that fresh measurement against complete converter
+   state, the exact plan/source/code identities, all 48 shards and 13,896
+   replaced weights/scales, native index coverage and provenance. It reads only
+   bounded metadata; the separate measurer hashes the actual weight payloads.
+   Both model and evidence mounts are read-only to the check, with no network,
+   proxy keys or dstack socket.
+3. The pinned eight-GPU communication preflight must succeed before the proxy
+   starts. Neither a failed native check nor a failed communication check may
+   advance to the serving engine.
+4. The authenticated loopback vLLM engine starts with a read-only model, a
+   non-root UID, dropped capabilities, no new privileges, a writable temporary
+   compilation cache, disabled core dumps, offline model access and no developer
+   routes. Proxy `RUNTIME_DIGEST` and its model-manifest path change with the
+   engine; unrelated proxy authority, keys and settlement controls are retained.
+5. A bounded normal `/v1/models` check records the observed canonical model,
+   1M context limit and package version. It explicitly labels 64 sequences as
+   configured, not a completed 64x1M workload. It sends no inference prompt and
+   does not enable developer `/server_info` routes.
+
+The private candidate is for review only. It is **not** the pending staging
+update, has not been approved or submitted, and has no published replacement
+policy pins. A final native digest still requires actual reconstruction and
+independent verification. Readiness alone cannot establish speed, quality or
+full capacity. Unit tests use small synthetic payloads and corruption cases;
+static Compose validation is not GPU execution.
+
+Optional tenant prefix-cache binding is implemented separately in
+[attest-proxy 26d71a8](https://github.com/AdverserialAI/attest-proxy/commit/26d71a8370a78db39ea21a1c7b17963e73ac2cde)
+and the private billing feature branch. Both remain disabled and undeployed.
+The initial future serving candidate keeps prefix caching off until real
+cross-account cache behavior, privacy and cached-token settlement pass.
