@@ -33,7 +33,10 @@ def prepare(source, converter_image, runtime_image, comms_script):
     if measurer['environment']['MODEL_ROOT']!='/model/cyberseek-q2':raise ValueError('Unexpected source artifact root')
     conversion={'image':converter_image,'restart':'no','init':True,'read_only':True,
         'user':'0:0','cap_drop':['ALL'],'security_opt':['no-new-privileges:true'],
-        'cpus':'8.0','mem_limit':'16g','pids_limit':256,'tmpfs':['/tmp:size=64m,mode=1777'],
+        # Do not impose a CPU quota: the guest Docker daemon can report only one
+        # schedulable CPU even when provider host metrics advertise many more.
+        # The converter's numerical libraries already use one thread.
+        'mem_limit':'16g','pids_limit':256,'tmpfs':['/tmp:size=64m,mode=1777'],
         'environment':{'OPENBLAS_NUM_THREADS':'1','OMP_NUM_THREADS':'1','PYTHONDONTWRITEBYTECODE':'1'},
         'command':['--source','/source/cyberseek-q2','--source-manifest',evidence_file.replace('/model-evidence/','/source-evidence/'),
                    '--plan','/app/q2-native-compact-plan.json','--output','/native'],

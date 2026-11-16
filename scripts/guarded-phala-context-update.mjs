@@ -7,9 +7,11 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import { allowedUpdateState } from './phala-update-state.mjs';
 
 const args = process.argv.slice(2);
 const apply = args.includes('--apply');
+const reviewedStartupError = args.includes('--reviewed-startup-error');
 function arg(name) {
   const index = args.indexOf(name);
   if (index < 0 || !args[index + 1] || args[index + 1].startsWith('--')) {
@@ -46,7 +48,7 @@ try {
   if (baseline.project_type !== 'gpu-rental/on-demand' || baseline.kms_type !== 'phala') {
     fail('Unexpected rental or KMS type');
   }
-  const { createClient, safeGetCvmInfo, safePatchCvm } = await import(pathToFileURL(sdkPath));
+  const { createClient, safeGetCvmInfo, safeGetCvmStats, safePatchCvm } = await import(pathToFileURL(sdkPath));
   const directory = process.env.PHALA_CLOUD_DIR || path.join(os.homedir(), '.phala-cloud');
   const credentials = JSON.parse(fs.readFileSync(path.join(directory, 'credentials.json'), 'utf8'));
   const profile = credentials.profiles[credentials.current_profile];
@@ -62,7 +64,11 @@ try {
   if (cvm.id !== baseline.id || cvm.vm_uuid !== baseline.vm_uuid || cvm.app_id !== baseline.app_id) {
     fail('CVM identity changed; no update submitted');
   }
-  if (cvm.status !== 'running' || cvm.in_progress !== false) {
+  // Narrow opt-in for the independently diagnosed CPU-quota startup failure.
+  // This is still an ordinary PATCH, never a stop/start/restart, and --apply
+  // still requires fresh explicit owner approval of the exact correction.
+  const stats = reviewedStartupError ? await safeGetCvmStats(client, {id: cvm.id}) : null;
+  if (!allowedUpdateState(cvm, report, stats?.success ? stats.data : null, reviewedStartupError)) {
     fail('Existing CVM operation has not finished; no update submitted');
   }
   if (cvm.public_logs !== true) fail('Diagnostic log activation has not completed');
@@ -87,6 +93,8 @@ try {
     requested_context_per_slot: 1048576, requested_slots: 64,
     max_output_tokens: 65536, allow_force_stop: false,
     prepared_sha256: report.prepared_sha256,
+    reviewed_startup_error_correction: reviewedStartupError,
+    provider_status: cvm.status,
     mode: apply ? 'apply' : 'read-only-preflight',
     update_submitted: false,
   };

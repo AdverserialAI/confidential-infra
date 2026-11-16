@@ -33,6 +33,9 @@ class StageTests(unittest.TestCase):
         self.assertEqual(after['services']['model-measurer'],before['services']['model-measurer'])
         self.assertEqual(after['services']['attest-proxy']['environment']['RECEIPT_SIGNING_SEED'],'synthetic-receipt-seed')
         conversion=after['services']['q2-native-reconstruction']
+        self.assertNotIn('cpus',conversion)
+        self.assertEqual(conversion['mem_limit'],'16g')
+        self.assertEqual(conversion['environment']['OMP_NUM_THREADS'],'1')
         self.assertNotIn('deploy',conversion)
         self.assertNotIn('ports',conversion)
         self.assertEqual(conversion['cap_drop'],['ALL'])

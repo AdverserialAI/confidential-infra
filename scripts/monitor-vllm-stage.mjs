@@ -100,7 +100,7 @@ async function main() {
   const results = await Promise.allSettled([sdk.safeGetCvmInfo(client, {id}),
     sdk.safeGetCvmContainersStats(client, {id}), sdk.safeGetCvmStats(client, {id})]);
   const data = i => results[i].status === 'fulfilled' && results[i].value.success ? results[i].value.data : null;
-  const cvm = data(0), containers = data(1)?.containers, sys = data(2)?.sysinfo;
+  const cvm = data(0), containers = data(1)?.containers, stats = data(2), sys = stats?.sysinfo;
   const report = {observed_at_utc: new Date().toISOString(), cvm_mutations: 0,
     inference_prompts_sent: 0, provider: null, components: {},
     native_conversion_gpu_startup_speed_or_quality_not_inferred_from_provider_status: true};
@@ -109,6 +109,13 @@ async function main() {
     report.provider = {status: cvm.status, in_progress: cvm.in_progress, compose_hash: cvm.compose_hash,
       docker_compose_sha256: digest, expected_staging_configuration: digest === EXPECTED};
   }
+  if (stats) report.guest_startup = {
+    online: stats.is_online === true,
+    container_startup_failed: stats.boot_error === 'failed to start containers',
+    reported_stopped: stats.status === 'stopped',
+    // Provider-reported state is not a stop command issued by this observer.
+    in_progress: stats.in_progress,
+  };
   if (sys) report.host_resources = {num_cpus: sys.num_cpus, available_memory: sys.available_memory,
     loadavg: [sys.loadavg_one, sys.loadavg_five, sys.loadavg_fifteen],
     disks: sys.disks.map(d => ({total_size: d.total_size, free_size: d.free_size})), gpu_metrics_available: false};

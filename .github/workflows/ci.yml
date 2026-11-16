@@ -25,5 +25,7 @@ jobs:
           python scripts/test-native-artifact-check.py
           python scripts/test-vllm-serving-preparation.py
           python scripts/test-vllm-stage-preparation.py
+          python scripts/test-vllm-stage-cpu-fix.py
           python scripts/test-llama-context-update.py
           node --test scripts/test-vllm-stage-monitor.mjs
+          node --test scripts/test-phala-update-state.mjs

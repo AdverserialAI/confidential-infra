@@ -2,9 +2,11 @@
 
 Status, November 16, 2026: migration preparation, **not deployed or GPU tested**.
 The owner approved the exact isolated staging update on November 16; Phala
-accepted it at 09:28 UTC (details below). The current workspace AGENTS.md
-requires explicit approval before any additional CVM change. Monitor the
-accepted operation; the later serving switch is not approved. Never stop,
+accepted it at 09:28 UTC (details below). Serial logs subsequently confirmed
+a container-creation failure caused by the converter's 8-CPU quota. The exact
+correction below is prepared but not approved or submitted. The current workspace
+AGENTS.md requires explicit approval before any additional CVM change. The
+later serving switch is not approved. Never stop,
 shut down, delete, force-stop
 or remove the on-demand rental. Preserve recovery configuration and weights;
 any later recovery must also use an approved ordinary guarded update.
@@ -159,7 +161,8 @@ native download manifest pins 84 files, including 48 weight shards, totaling
 
 `scripts/prepare-vllm-stage.py` prepares a private candidate locally. It adds:
 
-- A CPU-only converter with 8 CPU and 16 GiB limits, active model and evidence
+- A CPU-only converter with a 16 GiB memory limit and one-thread numerical
+  libraries, active model and evidence
   volumes mounted read-only, and a separate native output volume.
 - An eight-rank communication preflight using the exact vLLM image. It sends
   only small synthetic tensors over loopback, with no model, prompts, secrets
@@ -181,6 +184,14 @@ boot Compose hash:
 `2c29262158e490646ca46cf249ac1da58c38d3daead6e2440bf68ab4dd21a225`.
 Provider status was `updating` with the exact approved configuration at the
 first post-acceptance checks; container observation was temporarily unavailable.
+At 10:38–10:41 UTC the provider reported `error`, no operation in progress,
+and `failed to start containers`. Serial logs establish that Docker rejected
+the converter's `cpus: '8.0'`: its daemon reported only one available CPU.
+Both new images were pulled, but container creation failed before native
+conversion or GPU preflight. Host CPU counts do not override this daemon check;
+why Docker reports one CPU remains unconfirmed. This was a staging configuration
+mistake, not evidence that vLLM inference crashed. No stop command was issued.
+
 Native conversion and GPU communication results remain unverified. Do not
 resubmit, stack an update or perform recovery restart during this operation.
 The later serving switch needs a separately reviewed configuration,
@@ -201,6 +212,28 @@ triggering any mutation. Run it with the installed Phala SDK path and a local
 sanitized `--report` destination. It does not submit inference prompts or enable
 additional diagnostic settings. Its two privacy/field-boundary tests run with
 `node --test scripts/test-vllm-stage-monitor.mjs`.
+
+### Prepared CPU-quota correction; new approval required
+
+`scripts/prepare-vllm-stage-cpu-fix.py` accepts only the exact failed staging
+SHA above. It removes the converter's CPU quota and updates the declared
+configuration digest. Every other semantic field, serving argument, key,
+volume, image, 16 GiB memory cap and one-thread library setting is preserved.
+The fixed private candidate's Docker Compose SHA-256 is
+`313355e984ff088cb0e7b658b66178cfec4211111e9c04787cac073058128fd8`,
+declared digest
+`sha256:69a6ddaf1f832bd5eb244b29aacc08f89677fb6a6e7d82266d1a16d9455c34f8`.
+It is not submitted and does not change the 64-session/1M target.
+
+The guarded ordinary update now has a narrow `--reviewed-startup-error` path.
+It still defaults to read-only and requires separate explicit owner approval
+before `--apply`. The opt-in requires the exact failed baseline, diagnosed
+container-startup error, no active operation, unchanged on-demand rental,
+KMS and app identity; any other state is rejected. It only uses the ordinary
+PATCH with `allow_force_stop=false`, never stop/start/restart/delete. The
+initial staging approval does not authorize this additional update or the
+future serving switch. Tests cover rejected states and preservation boundaries;
+they do not prove a provider will accept an update from its current error state.
 
 ## Primary references
 
