@@ -189,3 +189,42 @@ tenant isolation and downstream launch gates remain open.
 - [Pinned V4.1 forward conversion](https://github.com/ggml-org/llama.cpp/blob/c49edf0963a76d5e78b2a7278c9bd5b71d26c84f/conversion/deepseek41.py)
 - [Pinned lossless native/GGUF MXFP4 packing](https://github.com/ggml-org/llama.cpp/blob/c49edf0963a76d5e78b2a7278c9bd5b71d26c84f/conversion/base.py#L918)
 - [Pinned Huihui patch](https://huggingface.co/huihui-ai/Huihui-DeepSeek-V4.1-Flash-1017-abliterated-GGUF/blob/73fa239749dfc09e847ea5e1149626d064224d92/patch-unsloth-Q2/patch-unsloth-DeepSeek-V4.1-Flash-1017-dec.py)
+
+## Reviewed launch target and outstanding isolation checks
+
+`profiles/cyberseek-vllm-h200.json` replaces the earlier one-session/native-TP4
+artifact proposal. It is a non-executable plan, with no credential values. A
+private Compose generator must preserve backend authentication and all proxy
+security controls before any later deployment. The pending staging candidate
+is unchanged by this launch-plan review.
+
+The launch target is TP8, 64 scheduled sequences, 1,048,576 context tokens per
+request, a 65,536 output cap, chunked prefill and an initial 4,096-token prefill
+budget. It retains vision support and ordinary graph execution. Engram host
+offload and a small prefill budget are memory levers for profiling, not a
+proven fast configuration. The proposed NCCL host-transport fallback must pass
+the staged communication test and later realistic communication benchmarks.
+
+Pinned Hopper attention source resolves FP8 KV to its packed DeepSeek layout;
+the smaller V4.1 MXFP8/NVFP4 record is selected only on SM100. Do not borrow a
+Blackwell cache-memory estimate or unsupported 4-bit KV setting for H200.
+Measure actual allocated cache blocks, memory headroom and preemptions. A
+64-sequence scheduler limit does not reserve 64 full 1M-token windows.
+
+Upstream prefix caching defaults on. This initial plan explicitly disables it
+and multimodal preprocessing caches until cross-tenant namespace handling is
+implemented and tested. Current signed entitlements deliberately contain no
+stable tenant identity, and the proxy does not bind a tenant cache salt. A
+client-provided salt alone is insufficient. Cache-related prices must use
+actual measured cached usage; do not invent cache hits or claim that this
+uncached baseline is the final performance result. Request, output, delta and
+HTTP access logging are disabled in the proposed backend; the public-log
+acceptance test must also check failure paths and third-party diagnostics.
+
+Speed acceptance must report queueing, first-token latency, prefill, decode,
+end-to-end throughput and errors, compared with the measured llama.cpp
+baselines. Increase concurrency through 1, 2, 4, 8, 16, 32 and 64; include
+representative short prompts and near-1M independent recall tests. Full 64x1M
+occupancy is a separate workload and cannot be inferred from those flags or
+small probes. Prefix-cache isolation, artifact behavior, streaming, tools,
+cancellation, output bounds, signed receipts and metering must all pass.

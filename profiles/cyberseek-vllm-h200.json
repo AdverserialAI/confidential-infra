@@ -1,0 +1,130 @@
+{
+  "status": "reviewed local launch plan; not deployable until artifact, transport and capacity gates pass",
+  "engine": "vllm",
+  "version": "0.33.0",
+  "source_commit": "4ba787ec9959e566d3b587a796dff07673324da5",
+  "image": "vllm/vllm-openai@sha256:91ee972ab751fb7180bc71c175865e36b091686600dca783d52b2511399810b3",
+  "platform": "linux/amd64",
+  "hardware_target": "existing confidential 8xH200 SM90 rental",
+  "non_executable_template": true,
+  "backend_authentication": "Private Compose generator must inject the existing loopback API key; authentication is intentionally absent from this public template",
+  "argv_without_secret_authentication": [
+    "serve",
+    "/data/model",
+    "--served-model-name",
+    "adverserial/cyberseek",
+    "--tensor-parallel-size",
+    "8",
+    "--max-model-len",
+    "1048576",
+    "--max-num-seqs",
+    "64",
+    "--max-num-batched-tokens",
+    "4096",
+    "--enable-chunked-prefill",
+    "--tokenizer-mode",
+    "deepseek_v41",
+    "--enable-auto-tool-choice",
+    "--tool-call-parser",
+    "deepseek_v41",
+    "--reasoning-parser",
+    "deepseek_v41",
+    "--generation-config",
+    "vllm",
+    "--override-generation-config",
+    "{\"max_new_tokens\":65536}",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "30000",
+    "--gpu-memory-utilization",
+    "0.92",
+    "--kv-cache-dtype",
+    "fp8",
+    "--engram-config",
+    "{\"cpu_offload\":true}",
+    "--disable-custom-all-reduce",
+    "--no-enable-prefix-caching",
+    "--mm-processor-cache-gb",
+    "0",
+    "--no-enable-log-requests",
+    "--no-enable-log-outputs",
+    "--no-enable-log-deltas",
+    "--disable-uvicorn-access-log",
+    "--enable-prompt-tokens-details"
+  ],
+  "environment": {
+    "NCCL_P2P_DISABLE": "1",
+    "NCCL_IB_DISABLE": "1",
+    "NCCL_NET_GDR_LEVEL": "0",
+    "NCCL_CUMEM_HOST_ENABLE": "0",
+    "NCCL_SOCKET_IFNAME": "lo",
+    "OMP_NUM_THREADS": "1",
+    "VLLM_ENGINE_READY_TIMEOUT_S": "7200",
+    "VLLM_NO_USAGE_STATS": "1",
+    "DO_NOT_TRACK": "1",
+    "VLLM_LOGGING_LEVEL": "INFO"
+  },
+  "required_container_controls": {
+    "backend_network_namespace": "service:attest-proxy",
+    "published_backend_ports": false,
+    "model_volume_read_only": true,
+    "native_output_volume": "cyberseek-vllm-native-data",
+    "new_model_measurement_required": true,
+    "cap_drop": [
+      "ALL"
+    ],
+    "security_opt": [
+      "no-new-privileges:true"
+    ],
+    "memlock_unlimited": true,
+    "dedicated_shm_required": true,
+    "no_host_or_privileged_container": true
+  },
+  "artifact": {
+    "kind": "native-base reconstruction retaining actual measured Q2_2 modified projections",
+    "input_measured_gguf_digest": "sha256:8dd425171ed78e68263a45f8d01317d991b92bc7128321464f1ab82d9a05eae8",
+    "native_base_revision": "08c8657f02291e11b6f6b63e0e16014f8e748518",
+    "huihui_patch_revision": "73fa239749dfc09e847ea5e1149626d064224d92",
+    "patch_variant": "Q2_2",
+    "expert_mode": 2,
+    "modified_layers": [
+      11,
+      28
+    ],
+    "new_artifact_digest": null,
+    "bit_equivalent_to_all_original_gguf_weights": false
+  },
+  "capacity_claim": {
+    "max_scheduled_sequences": 64,
+    "max_context_tokens_per_request": 1048576,
+    "output_cap": 65536,
+    "reserved_full_64_by_1M_capacity_proven": false,
+    "dynamic_kv_cache_and_preemption_must_be_measured": true
+  },
+  "security_acceptance": [
+    "No prompt/output/secret values in public logs",
+    "Loopback API authentication preserved; direct backend not published",
+    "Cross-account requests cannot access another account/session/KV response",
+    "Do not enable prefix caching until a signed tenant-isolation namespace is enforced and tested; user-supplied cache_salt alone is insufficient",
+    "Preserve vision support; no language-model-only reduction in this baseline",
+    "Fresh exact model/runtime/config hardware pins and signed encrypted inference before sensitive prompts"
+  ],
+  "performance_acceptance": [
+    "Benchmark against both existing 55-token and 9285-token synthetic baselines",
+    "Measure queued time, TTFT, prefill throughput, decode throughput and end-to-end time separately",
+    "Increase active sessions through 1,2,4,8,16,32,64 and record errors/preemptions/fairness",
+    "Increase context through representative small and near-1M cases; test unique recall markers in independent sessions",
+    "Do not describe 64x1M as sustained validated capacity unless that workload completes",
+    "Compare streaming, tool calls, cancellation, cached-token accounting and model behavior",
+    "Evaluate larger prefill chunks and optional speculative decoding only with actual H200 memory/performance/quality evidence; never turn off security checks to obtain a speed result"
+  ],
+  "sources": [
+    "https://github.com/vllm-project/vllm/blob/4ba787ec9959e566d3b587a796dff07673324da5/recipes/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml",
+    "https://github.com/vllm-project/vllm/blob/4ba787ec9959e566d3b587a796dff07673324da5/vllm/engine/arg_utils.py",
+    "https://github.com/vllm-project/vllm/blob/4ba787ec9959e566d3b587a796dff07673324da5/vllm/models/deepseek_v41/attention.py",
+    "https://github.com/vllm-project/vllm/blob/4ba787ec9959e566d3b587a796dff07673324da5/vllm/models/deepseek_v41/nvidia/flashmla.py",
+    "https://github.com/vllm-project/vllm/blob/4ba787ec9959e566d3b587a796dff07673324da5/vllm/config/cache.py",
+    "https://github.com/vllm-project/vllm/blob/4ba787ec9959e566d3b587a796dff07673324da5/vllm/entrypoints/common/cli_args.py"
+  ]
+}
