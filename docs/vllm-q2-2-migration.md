@@ -360,3 +360,13 @@ Optional tenant prefix-cache binding is implemented separately in
 and the private billing feature branch. Both remain disabled and undeployed.
 The initial future serving candidate keeps prefix caching off until real
 cross-account cache behavior, privacy and cached-token settlement pass.
+
+The bounded acceptance benchmark lives with the central deployment tooling:
+[benchmark-attested-inference.py](https://github.com/AdverserialAI/agent-deployment/blob/docs/cyberseek-vllm-migration/scripts/benchmark-attested-inference.py).
+It defaults to an offline plan, supports the 1/2/4/8/16/32/64 client concurrency
+staircase, and executes through ACK's exact pinned hardware/TLS/EHBP/receipt
+path only with explicit execution and reviewed artifact pins. It records
+numeric results without private prompts/responses, stops escalating after a
+failure and excludes unverified results from timing summaries. Its offline
+tests do not establish actual GPU speed, full 64×1M capacity or tenant isolation;
+those acceptance gates remain open.
