@@ -7,7 +7,15 @@ import crypto from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
 
-const EXPECTED = '9c8455bd7ee1134f87277c72aaa92c6d493e44c2adf4ac4abfe9c76813f1ae0a';
+const DEFAULT_EXPECTED = '9c8455bd7ee1134f87277c72aaa92c6d493e44c2adf4ac4abfe9c76813f1ae0a';
+
+export function expectedSha(args) {
+  const index = args.indexOf('--expected-sha');
+  if (index < 0) return DEFAULT_EXPECTED;
+  const value = args[index + 1];
+  if (!/^[a-f0-9]{64}$/.test(value || '')) throw new Error();
+  return value;
+}
 const EVENTS = new Set(['source_model_identity_verified', 'native_shard_download_started',
   'native_shard_completed', 'native_shard_revalidated', 'native_reconstruction_complete',
   'native_reconstruction_failed', 'vllm_cli_preflight', 'confidential_gpu_comms_preflight',
@@ -104,10 +112,11 @@ async function main() {
   const report = {observed_at_utc: new Date().toISOString(), cvm_mutations: 0,
     inference_prompts_sent: 0, provider: null, components: {},
     native_conversion_gpu_startup_speed_or_quality_not_inferred_from_provider_status: true};
+  const expected = expectedSha(args);
   if (cvm) {
     const digest = crypto.createHash('sha256').update(cvm.compose_file.docker_compose_file).digest('hex');
     report.provider = {status: cvm.status, in_progress: cvm.in_progress, compose_hash: cvm.compose_hash,
-      docker_compose_sha256: digest, expected_staging_configuration: digest === EXPECTED};
+      docker_compose_sha256: digest, expected_staging_configuration: digest === expected};
   }
   if (stats) report.guest_startup = {
     online: stats.is_online === true,

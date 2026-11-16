@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {summarize} from './monitor-vllm-stage.mjs';
+import {summarize, expectedSha} from './monitor-vllm-stage.mjs';
 
 test('monitor retains bounded native progress and drops private trace/body fields', () => {
   const raw = [
@@ -25,4 +25,12 @@ test('monitor copies only rank/result numbers and a complete measured digest', (
   assert.deepEqual(report.events[0].failed_ranks, [{rank: 1, unsupported_operation_observed: true, out_of_memory_observed: false}]);
   assert.equal(report.measurement.files, 9);
   assert.doesNotMatch(JSON.stringify(report), /PRIVATE|SECRET|raw_stderr/);
+});
+
+test('monitor accepts only an explicit reviewed corrected SHA override', () => {
+  assert.equal(expectedSha([]), '9c8455bd7ee1134f87277c72aaa92c6d493e44c2adf4ac4abfe9c76813f1ae0a');
+  assert.equal(expectedSha(['--expected-sha', '3'.repeat(64)]), '3'.repeat(64));
+  for (const args of [['--expected-sha'], ['--expected-sha', 'not-a-sha'], ['--expected-sha', 'A'.repeat(64)]]) {
+    assert.throws(() => expectedSha(args));
+  }
 });
