@@ -1,10 +1,11 @@
 # Huihui Q2_2 to vLLM: implementation and acceptance plan
 
 Status, November 16, 2026: migration preparation, **not deployed or GPU tested**.
-Current supervision instructions require leaving the existing 8×H200 CVM
-unchanged. The current workspace AGENTS.md requires explicit approval before
-any CVM change. Preparation and read-only inspection may continue; an update
-must wait for explicit owner approval. Never stop, shut down, delete, force-stop
+The owner approved the exact isolated staging update on November 16; Phala
+accepted it at 09:28 UTC (details below). The current workspace AGENTS.md
+requires explicit approval before any additional CVM change. Monitor the
+accepted operation; the later serving switch is not approved. Never stop,
+shut down, delete, force-stop
 or remove the on-demand rental. Preserve recovery configuration and weights;
 any later recovery must also use an approved ordinary guarded update.
 
@@ -171,16 +172,35 @@ except the deployment digest needed to bind the reviewed additions. It does
 not call a cloud API. `scripts/test-vllm-stage-preparation.py` covers those
 preservation checks and rejected configuration/image changes.
 
-The staged candidate still uses the current llama.cpp server. Conversion and
-GPU communication have **not run** on the CVM; no staged update has been
-submitted. The later serving switch needs a separately reviewed configuration,
+The staged configuration still uses the current llama.cpp server. The owner
+approved it and Phala accepted one ordinary update at 09:28 UTC on November 16,
+correlation `64764bc2ec9a787541b6a133e2b6343d`, with `allow_force_stop=false`.
+Approved Docker Compose SHA-256:
+`9c8455bd7ee1134f87277c72aaa92c6d493e44c2adf4ac4abfe9c76813f1ae0a`;
+boot Compose hash:
+`2c29262158e490646ca46cf249ac1da58c38d3daead6e2440bf68ab4dd21a225`.
+Provider status was `updating` with the exact approved configuration at the
+first post-acceptance checks; container observation was temporarily unavailable.
+Native conversion and GPU communication results remain unverified. Do not
+resubmit, stack an update or perform recovery restart during this operation.
+The later serving switch needs a separately reviewed configuration,
 fresh measurements and policy bindings. Do not publish pins from provider
 claims alone or bypass existing ACK checks during either transition.
 
-Current baseline independently passes pinned hardware attestation and two
-bounded encrypted sessions with verified signed receipts. Performance remains
+The saved pre-staging baseline independently passed pinned hardware attestation
+and two bounded encrypted sessions with verified signed receipts. Performance remains
 unacceptable. Full 64×1M occupancy/recall, whole-model behavior, maximum output,
 tenant isolation and downstream launch gates remain open.
+
+`scripts/monitor-vllm-stage.mjs` observes only this approved staging configuration
+through read-only provider/container/log APIs. It records allowlisted numeric
+conversion progress, fresh measurement metadata and communication results;
+raw logs, prompts, credentials and private traces are withheld. Temporary API
+unavailability is reported without treating it as a terminal operation or
+triggering any mutation. Run it with the installed Phala SDK path and a local
+sanitized `--report` destination. It does not submit inference prompts or enable
+additional diagnostic settings. Its two privacy/field-boundary tests run with
+`node --test scripts/test-vllm-stage-monitor.mjs`.
 
 ## Primary references
 
