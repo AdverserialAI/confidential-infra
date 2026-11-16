@@ -6,6 +6,7 @@ runtime-service or rental settings are changed. Parent suppresses raw failures.
 """
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -36,6 +37,17 @@ if not verified:raise SystemExit(2)
 '''
 
 
+def stderr_summary(stderr):
+    lines = [line.strip() for line in stderr.splitlines() if line.strip()]
+    candidates = [line for line in reversed(lines) if re.search(
+        r'(?:error|failed|exception|traceback|unsupported|invalid|unavailable|denied|refused|timeout|out of memory)',
+        line, re.IGNORECASE)]
+    summary = candidates[0] if candidates else (lines[-1] if lines else '')
+    summary = re.sub(r'/(?:[^\s:;]+/)+[^\s:;]+', '<path>', summary)
+    summary = re.sub(r'0x[0-9a-fA-F]+', '0x…', summary)
+    return summary[:240]
+
+
 def main():
     # Fixed transport settings avoid the unsupported direct GPU peer-copy
     # path while keeping all communication inside this container's TEE.
@@ -61,10 +73,13 @@ def main():
         for rank,child in enumerate(children):
             stdout,stderr=child.communicate(timeout=240)
             if child.returncode:
-                failures.append({'rank':rank,'exit_code':child.returncode,
+                failure = {'rank':rank,'exit_code':child.returncode,
                     'unsupported_operation_observed':'operation not supported' in stderr.lower(),
                     'out_of_memory_observed':'out of memory' in stderr.lower(),
-                    'raw_stderr_bytes_withheld':len(stderr.encode())})
+                    'raw_stderr_bytes_withheld':len(stderr.encode())}
+                summary=stderr_summary(stderr)
+                if summary:failure['error_summary']=summary
+                failures.append(failure)
             else:
                 result=json.loads(stdout.strip().splitlines()[-1])
                 allowed=['rank','verified','device_name','compute_capability',

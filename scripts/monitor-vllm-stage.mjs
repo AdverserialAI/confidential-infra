@@ -51,10 +51,17 @@ export function summarize(raw) {
         Number.isInteger(r.rank) && r.rank >= 0 && r.rank < 8 && r.verified === true).map(r => r.rank) : [];
       event.average_4MiB_allreduce_milliseconds = Array.isArray(input.reports) ? input.reports.map(r =>
         r.average_4MiB_allreduce_milliseconds).filter(n => typeof n === 'number' && Number.isFinite(n)) : [];
-      event.failed_ranks = Array.isArray(input.failures) ? input.failures.filter(r =>
-        Number.isInteger(r.rank) && r.rank >= 0 && r.rank < 8).map(r => ({rank: r.rank,
-          unsupported_operation_observed: r.unsupported_operation_observed === true,
-          out_of_memory_observed: r.out_of_memory_observed === true})) : [];
+      event.failed_ranks = []
+      if (Array.isArray(input.failures)) {
+        for (const failure of input.failures) {
+          if (!Number.isInteger(failure.rank) || failure.rank < 0 || failure.rank >= 8) continue;
+          const entry = {rank: failure.rank,
+            unsupported_operation_observed: failure.unsupported_operation_observed === true,
+            out_of_memory_observed: failure.out_of_memory_observed === true};
+          if (typeof failure.error_summary === 'string') entry.error_summary = failure.error_summary.slice(0, 240);
+          event.failed_ranks.push(entry);
+        }
+      }
     }
     result.events.push(event);
   }
