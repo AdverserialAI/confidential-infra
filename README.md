@@ -6,11 +6,20 @@ no production credentials, customer data or model weights.
 ## What is deployed
 
 The composition that runs in production is in
-[`deployed/`](deployed/README.md): the exact Docker Compose file, an
-explanation of every service, and how its hashes are computed. In short:
+[`deployed/`](deployed/README.md): the exact Docker Compose file, the measured
+app-compose document, an explanation of every service, and how its hashes are
+computed. In short:
 
 - One Intel TDX confidential VM on Phala Cloud (dstack), OS image
-  `dstack-nvidia-0.5.15`, with 8× NVIDIA H200 in confidential mode.
+  `dstack-0.6.5`, with 8× NVIDIA H200 in NVIDIA's multi-GPU Protected PCIe
+  mode. The hosting provider moved the VM to this image on 2026-11-24; the
+  configuration on `dstack-nvidia-0.5.15` that this page named earlier that
+  day never served a request.
+- GPU attestation by the OS is switched off in the measured configuration
+  (`"attest_gpu": false`), because dstack 0.6.5 cannot check that GPU mode.
+  Nothing in the measured boot chain currently verifies the GPUs' protected
+  mode; [`deployed/`](deployed/README.md#gpu-attestation-by-the-os-is-switched-off)
+  explains what is and is not checked instead.
 - `https://api.adverserial.ai` is a CNAME to a Phala gateway that passes TLS
   bytes through. TLS terminates in
   [`attest-proxy`](https://github.com/AdverserialAI/attest-proxy)
@@ -26,7 +35,8 @@ explanation of every service, and how its hashes are computed. In short:
   `https://billing.adverserial.ai`. They contain token counts, not prompts or
   completions.
 
-Status: rolled out 2026-11-24; policy update pending first live attestation.
+Status: rolled out 2026-11-24 on `dstack-0.6.5`; policy update pending first
+verified live attestation.
 The policy clients verify against is published at
 <https://verify.adverserial.ai/policies/production.json>. This repository is
 not a source of runtime trust and does not by itself show that an endpoint is

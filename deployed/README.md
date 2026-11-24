@@ -1,30 +1,50 @@
 # Deployed composition (current reference)
 
 This directory holds the Docker Compose file that is actually deployed on the
-production confidential VM, copied byte for byte. It is the reference for what
-runs behind `https://api.adverserial.ai`. The root `docker-compose.yml`
+production confidential VM, copied byte for byte, and the app-compose JSON
+document that the VM's operating system measured at boot, also byte for byte.
+It is the reference for what runs behind `https://api.adverserial.ai`. The root `docker-compose.yml`
 template and the `.env.example` profiles describe an earlier design and are
 kept only as history (see the [root README](../README.md)).
 
 | | |
 | --- | --- |
-| File | [`2026-11-24/docker-compose.yml`](2026-11-24/docker-compose.yml) |
-| Status | Rolled out 2026-11-24; policy update pending first live attestation |
+| Files | [`2026-11-24/docker-compose.yml`](2026-11-24/docker-compose.yml) and the measured [`2026-11-24/app-compose.json`](2026-11-24/app-compose.json) |
+| Status | Rolled out 2026-11-24 on OS image `dstack-0.6.5`; policy update pending first verified live attestation |
 | Proxy | `ghcr.io/adverserialai/attest-proxy@sha256:5a41bcfb6d7f4f3d3df53ad5ac39a45d1d32a6db206e35c0380b81d56404824b` (tag `v0.1.0-rc.33`, source [AdverserialAI/attest-proxy](https://github.com/AdverserialAI/attest-proxy)) |
 | Model server | SGLang, `lmsysorg/sglang@sha256:b4f09a2ccbcfcc262d49600c3cd7f8581a793ea7d104947257b6a95500953b90` |
 | Model ID | `adverserial/cyberseek` |
-| Platform | One Intel TDX confidential VM on Phala Cloud (dstack), 8× NVIDIA H200 in confidential mode |
-| OS image | `dstack-nvidia-0.5.15`, `os_image_hash` `3bb7d262416f47db06855d7b7cf7d380538747206014b3c0adcddfef9b7c4ef2` |
+| Platform | One Intel TDX confidential VM on Phala Cloud (dstack), 8× NVIDIA H200 in NVIDIA's multi-GPU Protected PCIe mode (see [GPU attestation by the OS is switched off](#gpu-attestation-by-the-os-is-switched-off)) |
+| OS image | `dstack-0.6.5`, `os_image_hash` `4771a29e03e93f0e2d5e37174cd8bb1112942c9689deb36b16c5df9e183d8623`, NVIDIA driver 595.91.07 |
 | App ID | `b74e3dde6292cc69bac759b22fc723a299aa8a83` |
 | Endpoint | `https://api.adverserial.ai`, a CNAME to `gateway.dstack-pha1-usc1.phala.network`. The gateway passes TLS bytes through; TLS terminates in `attest-proxy` inside the VM. |
-| `compose_hash` | `275c6e538a381def20642459b5f5b37f5684d50b877604ee593c449ae51b1a1d` |
+| `compose_hash` | `9c78bf82dfad3a133838f2ac87406b3fe1c9d875d8a4d5fbe04e9f34d7d3b820` (= `sha256sum 2026-11-24/app-compose.json`) |
+| GPU policy in the measured manifest | `{"attest_gpu":false}`, measured as `gpu-policy-hash` `930188e08f58d0c555acff500a40be79c1f7e1d9ae23d26d901486cc9cc1a77d` |
 | Compose self-digest (`COMPOSE_DIGEST`) | `sha256:96ba75d8d59d93069da02661e2e6078f82b4cd7d2745a5b8b528057809831da4` |
+
+**What happened on 2026-11-24.** Earlier that day this page described the same
+compose on OS image `dstack-nvidia-0.5.15` (`os_image_hash` `3bb7d262…4ef2`)
+with `compose_hash` `275c6e53…1a1d`. That configuration never served a
+request: on that image one of the eight GPUs failed to initialise at every
+boot (NVIDIA driver 595.58.03). At about 14:00 UTC the hosting provider,
+Phala, moved the VM to `dstack-0.6.5` (one image; there is no separate
+`nvidia` variant any more) and changed two fields of the app-compose document:
+`manifest_version` went from `2` to `"3"` (a string), and
+`"requirements":{"gpu_policy":{"attest_gpu":false}}` was added. The Docker
+Compose text is byte-identical to before, so `COMPOSE_DIGEST` did not change,
+but `compose_hash` did. The proxy came up on the new image at 14:47 UTC with
+keys generated inside the VM (its Let's Encrypt certificate, requested from
+inside the VM, is dated 13:49 UTC), and the model was ready at 15:01 UTC. At 15:39 UTC the VM was
+restarted once more to replace one sealed variable (the key for NVIDIA's
+attestation service was not entitled, so the GPU evidence was stale); the
+configuration and `compose_hash` are the same after that restart.
 
 **What "policy update pending" means.** The policy published at
 <https://verify.adverserial.ai/policies/production.json> still describes the
 previous release (`v0.1.0-rc.30`, the earlier OS image and the earlier compose).
 A new policy for this composition is published only after a first live
-attestation of it has been checked. Until then this file documents what was
+attestation of it has been checked; that is planned for after the 15:39 UTC
+restart. Until then this file documents what was
 deployed; it is not a statement that the running service has been verified
 against it. No new measurements, TLS pins or receipt keys are recorded here:
 the published policy is the only place for them.
@@ -142,17 +162,95 @@ matching a file to a deployment but it is not a hardware measurement.
 **`compose_hash` (measured by dstack).** dstack does not hash this YAML file
 directly. It hashes the *app-compose* JSON document, which contains this file's
 text as one field together with the other deployment settings. `compose_hash`
-is the SHA-256 of that JSON serialised with keys sorted, compact separators
-(no spaces), and with null values and an empty `init_script` dropped. dstack
-extends the result into the TDX runtime measurements at boot, which is what
-ties a hardware quote to this exact configuration. Because the JSON wraps the
-file, `sha256sum docker-compose.yml` will not equal `compose_hash`, and a
-change of a single byte in the YAML changes it.
+is the SHA-256 of the exact bytes of that document as the VM received it; the
+guest does not parse and re-serialise it. Those bytes are in
+[`2026-11-24/app-compose.json`](2026-11-24/app-compose.json), so the check
+needs no tooling:
 
-The app-compose JSON itself is not in this repository. A separate public
-repository, `AdverserialAI/cyberseek-transparency`, is being published with an
-independent Python verifier, a hash-chained attestation history and the
-deployment files.
+```sh
+sha256sum deployed/2026-11-24/app-compose.json
+# 9c78bf82dfad3a133838f2ac87406b3fe1c9d875d8a4d5fbe04e9f34d7d3b820
+```
+
+dstack extends that value into the TDX runtime measurements (RTMR3, event
+`compose-hash`) at boot, which is what ties a hardware quote to this exact
+configuration. Because the JSON wraps the file, `sha256sum docker-compose.yml`
+will not equal `compose_hash`, and a change of a single byte in the YAML
+changes it.
+
+The form of those bytes, for anyone rebuilding them from what the Phala API
+shows for a VM: one JSON object, keys sorted, compact separators (no spaces),
+UTF-8, no trailing newline; keys whose value is `null` are left out and
+nothing else is. In particular `"name":""` is part of the bytes. One detail
+differs between manifest versions. For `"manifest_version":2` (dstack 0.5.x)
+the `"init_script":[]` that the API shows is not in the measured bytes. For
+`"manifest_version":"3"` (dstack 0.6.x, this deployment) it is. An earlier
+version of this page said an empty `init_script` is always dropped; that is
+wrong for version 3.
+
+To see that the JSON really wraps the compose file in this directory:
+
+```sh
+python3 - deployed/2026-11-24 <<'EOF'
+import json, sys
+d = sys.argv[1]
+app = json.load(open(d + "/app-compose.json"))
+print(app["docker_compose_file"] == open(d + "/docker-compose.yml").read())
+print(app["manifest_version"], app["requirements"])
+EOF
+```
+
+The same two files, an independent Python verifier and a hash-chained
+attestation history are published in
+[AdverserialAI/cyberseek-transparency](https://github.com/AdverserialAI/cyberseek-transparency)
+(`deployments/v0.1.0-rc.33-os-0.6.5/`).
+
+## The OS image
+
+`dstack-0.6.5` is a public download:
+<https://github.com/Dstack-TEE/dstack/releases/download/mkosi-os-v0.6.5/dstack-0.6.5.tar.gz>.
+Its `os_image_hash` is the SHA-256 of the file `sha256sum.txt` inside the
+archive, so anyone can recompute `4771a29e…8623`. It was built with `mkosi`
+from [Dstack-TEE/dstack](https://github.com/Dstack-TEE/dstack) at the tag
+`mkosi-os-v0.6.5`. The image carries no signed build provenance, and we have
+not rebuilt it from source.
+
+## GPU attestation by the OS is switched off
+
+The measured app-compose contains
+`"requirements":{"gpu_policy":{"attest_gpu":false}}`. We did not choose this;
+the hosting provider set it so that the VM boots, and this is what it means.
+
+dstack 0.6.x by default attests the GPUs at boot and requires each GPU's
+Confidential Computing mode to be on before it releases the VM's keys. A
+machine with eight H200 GPUs runs them in NVIDIA's multi-GPU Protected PCIe
+mode, and in that mode the per-GPU Confidential Computing status reads "off".
+The check in 0.6.5 does not recognise that mode and refuses to boot. Phala
+therefore disabled the check for this VM, and says it will add support for
+the mode and tell us when the flag can be removed.
+
+- The protection is the same as on dstack 0.5.x, which never had this check.
+- Nothing in the measured boot chain currently verifies that the GPUs are in
+  their protected mode.
+- The opt-out is visible to anyone who checks an attestation: it is in the
+  measured app-compose (so `compose_hash` covers it), and the RTMR3 event log
+  has the event `gpu-policy-hash` =
+  SHA-256 of the canonical JSON `{"attest_gpu":false}` =
+  `930188e08f58d0c555acff500a40be79c1f7e1d9ae23d26d901486cc9cc1a77d`, and no
+  `gpu-attestation` event.
+- In the meantime GPU attestation is done by our own `gpu-evidence-collector`
+  through NVIDIA's remote attestation service. That proves genuine GPUs,
+  firmware measurements that NVIDIA accepts, secure boot on and debug off. It
+  is not bound to the TDX quote, and it does not by itself prove Protected
+  PCIe mode.
+
+When the flag is removed the app-compose changes, so `compose_hash` changes,
+and this page will be updated with the new bytes.
+
+For reference, the RTMR3 events that dstack 0.6.5 writes at boot, in order:
+`system-preparing`, `app-id`, `compose-hash`, `gpu-policy-hash`,
+`instance-id`, `boot-mr-done`, `os-image-hash`, `key-provider`, `storage-fs`,
+`storage-encrypted`, `system-ready`.
 
 ## Related
 
