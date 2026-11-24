@@ -8,7 +8,7 @@
 > | --- | --- |
 > | Model `lordx64/cyberglm` | `adverserial/cyberseek` |
 > | Proxy `v0.1.0-rc.24` and its image digests | `v0.1.0-rc.33`, `ghcr.io/adverserialai/attest-proxy@sha256:5a41bcfb6d7f4f3d3df53ad5ac39a45d1d32a6db206e35c0380b81d56404824b` |
-> | OS image `dstack-nvidia-0.5.9-806a352e` | `dstack-nvidia-0.5.15` (`os_image_hash` `3bb7d262416f47db06855d7b7cf7d380538747206014b3c0adcddfef9b7c4ef2`) |
+> | OS image `dstack-nvidia-0.5.9-806a352e` | `dstack-0.6.5` (`os_image_hash` `4771a29e03e93f0e2d5e37174cd8bb1112942c9689deb36b16c5df9e183d8623`), with GPU attestation by the OS switched off; see [`deployed/`](deployed/README.md) |
 > | `api` points at `…-443s.dstack-pha-usc1.phala.network` | `api.adverserial.ai` is a CNAME to `gateway.dstack-pha1-usc1.phala.network` |
 > | SGLang on `127.0.0.1:30000` in the proxy's network namespace | SGLang on an `internal: true` Docker network, no published port |
 > | `SGLANG_LOOPBACK_TOKEN`, `METER_SIGNING_SEED`, `RECEIPT_SIGNING_SEED`, `EHBP_IDENTITY_B64` generated on an administrator workstation and sealed | Generated inside the VM since `rc.31`; the proxy refuses them as configuration. Releases up to `rc.30` did use the operator-generated values described here. |
