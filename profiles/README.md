@@ -1,3 +1,8 @@
+> **Historical.** The profile in this directory is the October 2026 CyberGLM
+> template. It is not the production configuration; see
+> [`../deployed/`](../deployed/README.md). The seed and loopback-token variables
+> it lists were removed in `attest-proxy` `v0.1.0-rc.31`.
+
 # Deployment profiles
 
 A profile describes one confidential inference node. It supplies a canonical
@@ -22,6 +27,6 @@ and verification tests outside production.
 add the model/node to the public registry.
 
 A new GPU vendor requires a collector that emits the common signed evidence
-contract to `/state/gpu-evidence.json`; the proxy receives no model weights and
+contract to `/evidence/gpu-evidence.json`; the proxy receives no model weights and
 is unchanged. It must not be declared supported in a policy until the client
 verifier validates that vendor's evidence chain.

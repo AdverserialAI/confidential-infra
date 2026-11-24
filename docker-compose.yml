@@ -1,3 +1,11 @@
+# HISTORICAL — NOT THE DEPLOYED CONFIGURATION.
+# Template for the October 2026 CyberGLM activation (attest-proxy up to rc.24): the model
+# server shared the proxy's loopback, and the receipt seed, meter seed, EHBP identity and
+# proxy-to-model token were operator-supplied sealed values. attest-proxy >= rc.31 generates
+# all of these inside the VM and refuses them as configuration.
+# The composition that runs in production is deployed/2026-11-24/docker-compose.yml
+# (see deployed/README.md). Kept unchanged below for the record.
+#
 # Confidential CyberGLM deployment template for a Phala 8×H200 Intel-TDX CVM.
 #
 # This file is a deployment contract, not a runnable default. Render it with

@@ -1,20 +1,21 @@
-# Program index
+# Component index
 
-The confidential platform is organized so models and nodes can be added by
-policy and configuration rather than by forking the client or proxy.
-
-| Component | Responsibility | Public evidence |
+| Component | Responsibility | Where it lives |
 | --- | --- | --- |
-| `confidential-chat` | Static browser UI; never proxies prompts | Source commit, asset-integrity manifest, GitHub build provenance |
-| `confidential-sdk` | Independent endpoint verification and direct client transport | Source, release artifacts, tests, signed releases |
-| `attest-proxy` | In-CVM TLS endpoint, evidence service, local entitlement check, signed meter | Source, SBOM, image digest, policy measurement |
-| `confidential-policy` | Canonical model IDs, approved nodes, release policy | Signed policy and public key set |
-| `billing` | Identity, reservations, entitlement signing, count-only settlement | Public entitlement JWK set and ledger audit records |
-| `confidential-infra` | Reviewed deployment templates and acceptance checks | Immutable compose and image digests |
+| `attest-proxy` (with the GPU evidence collector and model measurer) | In-VM TLS endpoint, evidence service, local entitlement check, signed receipts, signed meter | <https://github.com/AdverserialAI/attest-proxy> — source, release tags, digest-pinned images with provenance and SBOM |
+| Deployed composition | The Docker Compose file running in production and how its hashes are computed | [`deployed/`](deployed/README.md) in this repository |
+| Published policy and release manifests | What clients verify evidence against | <https://verify.adverserial.ai/policies/production.json>. [`confidential-policy`](https://github.com/AdverserialAI/confidential-policy) holds older templates and is not the live source. |
+| Chat client | Browser client; never proxies prompts | <https://chat.adverserial.ai>, built from [`confidential-open-webui`](https://github.com/AdverserialAI/confidential-open-webui). [`confidential-chat`](https://github.com/AdverserialAI/confidential-chat) is the earlier static client and is not deployed. |
+| Command-line client | Verification, local gateway and coding-harness setup | <https://github.com/AdverserialAI/adverserial-confidential-kit> |
+| SDK | TypeScript and Python verification libraries, gateway and plugins | <https://github.com/AdverserialAI/confidential-sdk> |
+| Billing | Identity, reservations, entitlement signing, count-only settlement | `https://billing.adverserial.ai` (not public source) |
+| Meter ingress | Optional mTLS boundary for meter records | <https://github.com/AdverserialAI/confidential-meter-ingress> — not used in production, which delivers signed records directly to billing |
+| Independent verifier and attestation history | Python verifier, hash-chained attestation history, deployment files | `AdverserialAI/cyberseek-transparency` (being published) |
 
-A model identifier is always canonical, for example
-`lordx64/cyberglm` or `lordx64/cyberkimi`. A new node or model needs a reviewed
-policy entry, an immutable runtime/model identity, and client-compatible
-evidence; it does not need a new product-specific proxy.
+Model identifiers are canonical `publisher/model` values. The model in
+production is `adverserial/cyberseek`. Earlier documents refer to
+`lordx64/cyberglm` and `lordx64/cyberkimi`, which this deployment does not
+serve.
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the full flow and production gates.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the request flow and trust
+boundaries.
