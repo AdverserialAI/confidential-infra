@@ -1,0 +1,584 @@
+name: dstack
+services:
+  attest-proxy:
+    cap_drop:
+    - ALL
+    depends_on:
+      inference-auth-init:
+        condition: service_completed_successfully
+        required: true
+      native-manifest-check:
+        condition: service_completed_successfully
+        required: true
+    environment:
+      ACME_DOMAINS: api.adverserial.ai
+      ACME_EMAIL: ops@adverserial.ai
+      ATTESTED_MODELS: adverserial/cyberseek
+      AUTH_REQUIRED: '0'
+      CERT_DIR: /state/certificates
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN}
+      CLOUDFLARE_ZONE: adverserial.ai
+      COMPOSE_DIGEST: sha256:96ba75d8d59d93069da02661e2e6078f82b4cd7d2745a5b8b528057809831da4
+      CONFIDENTIAL_ACTIVATION: active
+      CONFIDENTIAL_MODE: '1'
+      CORS_ALLOW_ORIGIN: https://chat.adverserial.ai
+      DNS_PROVIDER: cloudflare
+      DSTACK_SOCKET: /var/run/dstack.sock
+      ENCLAVE_KEY_DIR: /state/keys
+      EHBP_REQUIRED: '1'
+      ENDPOINT: https://api.adverserial.ai
+      ENTITLEMENT_AUDIENCE: https://api.adverserial.ai
+      ENTITLEMENT_ISSUER: https://billing.adverserial.ai
+      ENTITLEMENT_JWKS_JSON: '{"keys":[{"kty":"OKP","crv":"Ed25519","kid":"9ILSxW_NUHtA9Vfrzoq2yPS76EDd6ZbugqIcBcVQmCI","x":"zatmlekaVvhKB43-yNemBcngZNtjeCPewpmJmwFSoBQ","alg":"EdDSA","use":"sig"}]}'
+      ENTITLEMENT_REPLAY_DIR: /state/used-entitlements
+      GPU_EVIDENCE_FILE: /evidence/gpu-evidence.json
+      INFERENCE_STATUS_FILE: /run/inference-status/status.json
+      LISTEN_ADDR: :8443
+      METER_AUDIENCE: https://billing.adverserial.ai
+      METER_DELIVERY_MODE: direct-signed
+      METER_INGRESS_SHARED_SECRET: ${METER_INGRESS_SHARED_SECRET}
+      METER_ISSUER: https://api.adverserial.ai
+      METER_OUTBOX_DIR: /state/meter-outbox
+      METER_URL: https://billing.adverserial.ai
+      MODEL_ID: adverserial/cyberseek
+      MODEL_MANIFEST_FILE: /model-evidence/native-manifest.json
+      POLICY_ID: adverserial-policy/cyberseek
+      PUBLIC_BASE_URL: https://api.adverserial.ai
+      RECEIPT_AUDIENCE: https://chat.adverserial.ai
+      RECEIPT_ISSUER: https://verify.adverserial.ai
+      RUNTIME_DIGEST: sha256:b4f09a2ccbcfcc262d49600c3cd7f8581a793ea7d104947257b6a95500953b90
+      UPSTREAM: http://sglang:30000
+      UPSTREAM_BEARER_TOKEN_FILE: /run/handoff/upstream-token
+      VERIFICATION_URL: https://verify.adverserial.ai
+    image: ghcr.io/adverserialai/attest-proxy@sha256:5a41bcfb6d7f4f3d3df53ad5ac39a45d1d32a6db206e35c0380b81d56404824b
+    networks:
+      default: null
+      inference: null
+    ports:
+    - mode: ingress
+      target: 8443
+      published: '443'
+      protocol: tcp
+    read_only: true
+    restart: unless-stopped
+    security_opt:
+    - no-new-privileges:true
+    stop_grace_period: 30s
+    tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,size=64m
+    user: 65532:65532
+    volumes:
+    - type: bind
+      source: /var/run/dstack.sock
+      target: /var/run/dstack.sock
+      read_only: true
+      bind: {}
+    - type: volume
+      source: proxy-state-v2
+      target: /state
+      volume: {}
+    - type: volume
+      source: gpu-evidence-state
+      target: /evidence
+      read_only: true
+      volume: {}
+    - type: volume
+      source: model-evidence-state
+      target: /model-evidence
+      read_only: true
+      volume: {}
+    - type: volume
+      source: inference-handoff
+      target: /run/handoff
+      read_only: true
+      volume: {}
+    - type: volume
+      source: inference-status
+      target: /run/inference-status
+      read_only: true
+      volume: {}
+  gpu-evidence-collector:
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities:
+                - gpu
+              driver: nvidia
+              count: 8
+    environment:
+      GPU_EVIDENCE_EXPECTED_TYPE: nvidia-cc
+      GPU_EVIDENCE_INTERVAL: "300"
+      GPU_EVIDENCE_MIN_GPU_COUNT: "8"
+      GPU_EVIDENCE_OUT: /evidence/gpu-evidence.json
+      NV_ATTESTATION_SERVICE_KEY: ${NV_ATTESTATION_SERVICE_KEY}
+    image: ghcr.io/adverserialai/gpu-evidence-collector@sha256:88484069fde3c53f054b7d02645ab075166a24c0a43c2006723f148941967f06
+    networks:
+      default: null
+    read_only: true
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    user: 65532:65532
+    volumes:
+      - type: volume
+        source: gpu-evidence-state
+        target: /evidence
+        volume: {}
+    working_dir: /tmp
+  model-download:
+    entrypoint:
+    - /bin/bash
+    - -c
+    command:
+    - "set -euo pipefail; marker=\"/data/.download-complete-$${MODEL_REVISION}\"; oldmarker=\"/data/model/.download-complete-$${MODEL_REVISION}\"; if [ -f \"$$marker\" ]; then echo download-already-complete; elif [ -f \"$$oldmarker\" ] && [ -f /data/model/model.safetensors.index.json ]; then rm -f \"$$oldmarker\"; rm -rf /data/model/.cache; touch \"$$marker\"; echo download-migrated-complete; else rm -rf /data/model; python3 -m pip install --quiet --no-cache-dir \"huggingface_hub[hf_transfer]\"; hf download \"$${MODEL_REPO}\" --revision \"$${MODEL_REVISION}\" --repo-type model --local-dir /data/model; rm -rf /data/model/.cache; rm -f \"$$oldmarker\"; touch \"$$marker\"; fi; test -f /data/model/model.safetensors.index.json"
+    environment:
+      HF_HUB_ENABLE_HF_TRANSFER: '1'
+      HF_TOKEN: ${HF_TOKEN}
+      MODEL_REPO: Adverserial/cyberseek-v41-native
+      MODEL_REVISION: 306ccc48a95e24f802774de950b57f5edd0c8487
+    image: vllm/vllm-openai@sha256:91ee972ab751fb7180bc71c175865e36b091686600dca783d52b2511399810b3
+    networks:
+      default: null
+    restart: 'no'
+    user: 0:0
+    volumes:
+    - type: volume
+      source: cyberseek-v41-native-data
+      target: /data
+      volume: {}
+  model-measurer:
+    cap_drop:
+    - ALL
+    environment:
+      MODEL_ID: adverserial/cyberseek
+      MODEL_MANIFEST_FILE: /model-evidence/native-manifest.json
+      MODEL_ROOT: /native/model
+    image: ghcr.io/adverserialai/model-measurer@sha256:5f5f0653a7f75a1414a68a0e063ba7fb628f225cfb81e3a21512c206c7f4ad82
+    network_mode: none
+    depends_on:
+      model-perms:
+        condition: service_completed_successfully
+        required: true
+    read_only: true
+    restart: 'no'
+    security_opt:
+    - no-new-privileges:true
+    user: 65532:65532
+    volumes:
+    - type: volume
+      source: cyberseek-v41-native-data
+      target: /native
+      read_only: true
+      volume: {}
+    - type: volume
+      source: model-evidence-state
+      target: /model-evidence
+      volume: {}
+  model-perms:
+    depends_on:
+      model-download:
+        condition: service_completed_successfully
+        required: true
+    entrypoint:
+    - /bin/sh
+    - -c
+    - 'chmod -R a+rX /model && echo model-perms: ok'
+    image: vllm/vllm-openai@sha256:91ee972ab751fb7180bc71c175865e36b091686600dca783d52b2511399810b3
+    network_mode: none
+    read_only: true
+    restart: 'no'
+    user: 0:0
+    volumes:
+    - type: volume
+      source: cyberseek-v41-native-data
+      target: /model
+      volume: {}
+  sglang:
+    image: lmsysorg/sglang@sha256:b4f09a2ccbcfcc262d49600c3cd7f8581a793ea7d104947257b6a95500953b90
+    entrypoint:
+    - /bin/bash
+    - -c
+    command:
+    - |
+      set -u
+      BASE=/run/sglang-cache
+      TOKEN_FILE=/run/handoff/upstream-token
+      STATUS_FILE=/run/inference-status/status.json
+      BOOTED="$$(date -u +%FT%TZ)"
+      KEY="$$(head -c 200 "$$TOKEN_FILE" 2>/dev/null | tr -d '\r\n')"
+      case "$$KEY" in *[!A-Za-z0-9_-]*) KEY="" ;; esac
+      if [ "$${#KEY}" -lt 32 ]; then echo "FATAL: no usable upstream token in $$TOKEN_FILE" >&2; sleep 30; exit 1; fi
+      set -- "$$@" --api-key "$$KEY"
+      status() {
+        printf '{"ladder_id":"%s","rung":"%s","phase":"%s","attempt":"%s","started_at":"%s","updated_at":"%s","detail":"%s"}\n' "$${LID:-}" "$${RUNG:-}" "$$1" "$${NAME:-}" "$$BOOTED" "$$(date -u +%FT%TZ)" "$$2" > "$$STATUS_FILE.tmp" 2>/dev/null && mv -f "$$STATUS_FILE.tmp" "$$STATUS_FILE" 2>/dev/null
+      }
+      status preflight "container started"
+      for d in tmp home hf cache torchinductor triton deepgemm flashinfer nv; do mkdir -p "$$BASE/$$d" || exit 1; done
+      chown -R 65532:65532 "$$BASE" 2>/dev/null
+      chmod -R a+rwX "$$BASE" 2>/dev/null
+      chmod 1777 "$$BASE/tmp" 2>/dev/null
+      export TMPDIR="$$BASE/tmp" HOME="$$BASE/home" HF_HOME="$$BASE/hf" XDG_CACHE_HOME="$$BASE/cache" TORCHINDUCTOR_CACHE_DIR="$$BASE/torchinductor" TRITON_CACHE_DIR="$$BASE/triton" DG_JIT_CACHE_DIR="$$BASE/deepgemm" FLASHINFER_WORKSPACE_DIR="$$BASE/flashinfer" CUDA_CACHE_PATH="$$BASE/nv/ComputeCache"
+      shm_kb() { df -Pk /dev/shm 2>/dev/null | awk -v c="$$1" 'NR==2{print $$c}'; }
+      echo "shm check: size_kb=$$(shm_kb 2) used_kb=$$(shm_kb 3)"
+      echo "gpu preflight: nvidia-smi sees $$(nvidia-smi -L 2>/dev/null | grep -c GPU) GPUs"
+      python3 -c 'import torch; print("gpu preflight: torch cuda available", torch.cuda.is_available(), "count", torch.cuda.device_count(), "nccl", torch.cuda.nccl.version())' 2>&1 | tail -1
+      python3 -c 'import sglang; print("sglang version:", sglang.__version__)' 2>&1 | tail -1
+      (
+        while true; do
+          echo "HEARTBEAT $$(date -u +%H:%M:%S) gpu_util%,mem_MiB: $$(nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader,nounits 2>/dev/null | tr '\n' ';') loadavg: $$(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null) shm_used_kb: $$(shm_kb 3)"
+          sleep 60
+        done
+      ) &
+      HEARTBEAT_PID=$$!
+      LID="$${LADDER_ID:-a}"
+      STATE="$$BASE/.ladder-$$LID-rung"
+      WINNER="$$BASE/.ladder-$$LID-winner"
+      LADDER_LOG="$$BASE/.ladder-$$LID-log"
+      BUDGET="$${LADDER_BUDGET_S:-2700}"
+      PROBE="$${LADDER_PROBE_S:-30}"
+      LAST=4
+      HAVE_WINNER=1
+      RUNG="$$(cat "$$WINNER" 2>/dev/null)"
+      if [ -z "$$RUNG" ]; then HAVE_WINNER=0; RUNG="$$(cat "$$STATE" 2>/dev/null)"; fi
+      case "$$RUNG" in 1|2|3|4) ;; *) RUNG=1 ;; esac
+      echo "ladder $$LID history so far:"
+      cat "$$LADDER_LOG" 2>/dev/null
+      PORT=30000; prev=""
+      for a in "$$@"; do
+        case "$$prev" in --port) PORT="$$a" ;; --api-key) KEY="$$a" ;; esac
+        prev="$$a"
+      done
+      ARGS=("$$@")
+      DROP=0
+      export NCCL_DEBUG="$${NCCL_DEBUG:-WARN}"
+      case "$$RUNG" in
+        1) NAME=recipe-unprivileged-user
+           DROP=1
+           ARGS+=(--admin-api-key "$$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')") ;;
+        2) NAME=recipe-root-user ;;
+        3) NAME=no-speculation
+           ARGS=(); skip=0
+           for a in "$$@"; do
+             if [ "$$skip" = 1 ]; then skip=0; continue; fi
+             case "$$a" in --speculative-algorithm|--speculative-dspark-block-size) skip=1; continue ;; esac
+             ARGS+=("$$a")
+           done ;;
+        4) NAME=sockets-fallback
+           export NCCL_P2P_DISABLE=1 NCCL_SHM_DISABLE=1 NCCL_SOCKET_IFNAME=lo NCCL_CUMEM_HOST_ENABLE=0
+           ARGS+=(--disable-custom-all-reduce) ;;
+      esac
+      echo "ladder $$LID: starting rung $$RUNG ($$NAME), winner_known=$$HAVE_WINNER, budget=$${BUDGET}s"
+      status loading "elapsed=0s winner_known=$$HAVE_WINNER"
+      ready() {
+        SGL_PROBE_KEY="$$KEY" python3 -c 'import os,sys,urllib.request
+      r=urllib.request.Request("http://127.0.0.1:%s/v1/models"%sys.argv[1],headers={"Authorization":"Bearer "+os.environ["SGL_PROBE_KEY"]})
+      sys.exit(0 if urllib.request.urlopen(r,timeout=10).status==200 else 1)' "$$PORT" >/dev/null 2>&1
+      }
+      START=$$(date +%s)
+      STOPPING=0
+      if [ "$$DROP" = 1 ] && command -v setpriv >/dev/null 2>&1; then
+        setpriv --reuid=65532 --regid=65532 --clear-groups python3 -m sglang.launch_server "$${ARGS[@]}" &
+      else
+        if [ "$$DROP" = 1 ]; then echo "WARN: setpriv unavailable; running without uid drop" >&2; fi
+        python3 -m sglang.launch_server "$${ARGS[@]}" &
+      fi
+      CHILD=$$!
+      (
+        while kill -0 "$$CHILD" 2>/dev/null; do
+          sleep "$$PROBE"
+          NOW=$$(( $$(date +%s) - START ))
+          if ready; then
+            echo "$$(date -u +%FT%TZ) rung $$RUNG $$NAME READY after $${NOW}s" | tee -a "$$LADDER_LOG"
+            echo "$$RUNG" > "$$WINNER"
+            status ready "ready after $${NOW}s"
+            exit 0
+          fi
+          status loading "elapsed=$${NOW}s gpu_mem_MiB=$$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | tr '\n' ',')"
+          if [ "$$HAVE_WINNER" = 0 ] && [ "$$RUNG" -lt "$$LAST" ] && [ "$$NOW" -ge "$$BUDGET" ]; then
+            echo "$$(date -u +%FT%TZ) rung $$RUNG $$NAME not ready after $${NOW}s; moving on" | tee -a "$$LADDER_LOG"
+            echo $$((RUNG+1)) > "$$STATE"
+            status moving-on "rung $$RUNG not ready after $${NOW}s"
+            kill -TERM "$$CHILD" 2>/dev/null
+            exit 0
+          fi
+        done
+      ) &
+      MONITOR_PID=$$!
+      trap 'STOPPING=1; kill -TERM "$$CHILD" 2>/dev/null' TERM INT
+      wait "$$CHILD"; RC=$$?
+      while kill -0 "$$CHILD" 2>/dev/null; do wait "$$CHILD"; RC=$$?; done
+      ELAPSED=$$(( $$(date +%s) - START ))
+      echo "sglang exited rc=$$RC after $${ELAPSED}s (ladder $$LID rung $$RUNG $$NAME)" >&2
+      status exited "rc=$$RC after $${ELAPSED}s"
+      if [ "$$STOPPING" = 0 ] && [ "$$HAVE_WINNER" = 0 ] && [ ! -s "$$WINNER" ] && [ "$$RUNG" -lt "$$LAST" ] && [ "$$(cat "$$STATE" 2>/dev/null)" != "$$((RUNG+1))" ]; then
+        echo "$$(date -u +%FT%TZ) rung $$RUNG $$NAME exited rc=$$RC after $${ELAPSED}s; moving on" | tee -a "$$LADDER_LOG"
+        echo $$((RUNG+1)) > "$$STATE"
+      fi
+      kill "$$MONITOR_PID" "$$HEARTBEAT_PID" 2>/dev/null
+      sleep 5
+      exit "$$RC"
+    - 'sglang'
+    - '--model-path'
+    - '/data/model'
+    - '--served-model-name'
+    - 'adverserial/cyberseek'
+    - '--host'
+    - '0.0.0.0'
+    - '--port'
+    - '30000'
+    - '--trust-remote-code'
+    - '--tensor-parallel-size'
+    - '8'
+    - '--expert-parallel-size'
+    - '1'
+    - '--data-parallel-size'
+    - '1'
+    - '--attention-backend'
+    - 'dsv4'
+    - '--moe-runner-backend'
+    - 'marlin'
+    - '--enable-decoder-swa-bounded-replay'
+    - '--speculative-algorithm'
+    - 'DSPARK'
+    - '--speculative-dspark-block-size'
+    - '5'
+    - '--chunked-prefill-size'
+    - '4096'
+    - '--prefill-decode-interval'
+    - '16'
+    - '--swa-prefix-tails'
+    - '1024'
+    - '--cuda-graph-max-bs-decode'
+    - '64'
+    - '--max-running-requests'
+    - '32'
+    - '--mem-fraction-static'
+    - '0.8'
+    - '--context-length'
+    - '1048576'
+    - '--reasoning-parser'
+    - 'auto'
+    - '--tool-call-parser'
+    - 'auto'
+    - '--enable-cache-report'
+    - '--watchdog-timeout'
+    - '3600'
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      SGLANG_DSV41_REASONING_EFFORT: high
+      SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+      LADDER_ID: '2026-11-24p'
+      LADDER_BUDGET_S: '3600'
+      HF_HUB_OFFLINE: '1'
+      TRANSFORMERS_OFFLINE: '1'
+      DO_NOT_TRACK: '1'
+    depends_on:
+      inference-auth-init:
+        condition: service_completed_successfully
+        required: true
+      native-manifest-check:
+        condition: service_completed_successfully
+        required: true
+    networks:
+      inference: null
+    restart: unless-stopped
+    init: true
+    user: 0:0
+    cap_drop:
+    - ALL
+    cap_add:
+    - SYS_NICE
+    - SETUID
+    - SETGID
+    - CHOWN
+    - DAC_OVERRIDE
+    - FOWNER
+    - KILL
+    security_opt:
+    - no-new-privileges:true
+    pids_limit: 16384
+    shm_size: 32g
+    tmpfs:
+    - /tmp:size=32g,mode=1777
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      core:
+        soft: 0
+        hard: 0
+    deploy:
+      resources:
+        reservations:
+          devices:
+          - capabilities:
+            - gpu
+            driver: nvidia
+            count: 8
+    volumes:
+    - type: volume
+      source: cyberseek-v41-native-data
+      target: /data
+      read_only: true
+      volume: {}
+    - type: volume
+      source: sglang-cache-state
+      target: /run/sglang-cache
+      read_only: false
+      volume: {}
+    - type: volume
+      source: inference-handoff
+      target: /run/handoff
+      read_only: true
+      volume: {}
+    - type: volume
+      source: inference-status
+      target: /run/inference-status
+      read_only: false
+      volume: {}
+  inference-auth-init:
+    image: vllm/vllm-openai@sha256:91ee972ab751fb7180bc71c175865e36b091686600dca783d52b2511399810b3
+    entrypoint:
+    - python3
+    - -B
+    - -c
+    command:
+    - |
+      import os, secrets
+      path = '/handoff/upstream-token'
+      tmp = path + '.tmp'
+      fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o400)
+      with os.fdopen(fd, 'w') as f:
+          f.write(secrets.token_urlsafe(48))
+          f.flush()
+          os.fsync(f.fileno())
+      os.chown(tmp, 0, 65532)
+      os.chmod(tmp, 0o440)
+      os.replace(tmp, path)
+      os.chmod('/handoff', 0o755)
+      os.chown('/status', 0, 0)
+      os.chmod('/status', 0o755)
+      print('inference-auth-init: fresh proxy-to-inference token generated inside the VM')
+    network_mode: none
+    restart: 'no'
+    read_only: true
+    user: 0:0
+    cap_drop:
+    - ALL
+    cap_add:
+    - CHOWN
+    - FOWNER
+    - DAC_OVERRIDE
+    security_opt:
+    - no-new-privileges:true
+    mem_limit: 256m
+    pids_limit: 32
+    volumes:
+    - type: volume
+      source: inference-handoff
+      target: /handoff
+      volume: {}
+    - type: volume
+      source: inference-status
+      target: /status
+      volume: {}
+  retire-old-proxy-state:
+    image: vllm/vllm-openai@sha256:91ee972ab751fb7180bc71c175865e36b091686600dca783d52b2511399810b3
+    entrypoint:
+    - /bin/sh
+    - -c
+    command:
+    - |
+      n=0
+      while [ ! -s /new/certificates/certificate.crt ]; do
+        n=$$((n+1))
+        if [ "$$n" -gt 2880 ]; then echo "retire-old-proxy-state: new proxy state never appeared; leaving the old volume alone"; exit 0; fi
+        sleep 30
+      done
+      find /old -mindepth 1 -delete
+      echo "retire-old-proxy-state: old proxy state emptied; remaining entries $$(find /old -mindepth 1 | wc -l)"
+    network_mode: none
+    restart: 'no'
+    read_only: true
+    user: 0:0
+    cap_drop:
+    - ALL
+    cap_add:
+    - DAC_OVERRIDE
+    - DAC_READ_SEARCH
+    security_opt:
+    - no-new-privileges:true
+    mem_limit: 256m
+    pids_limit: 32
+    volumes:
+    - type: volume
+      source: proxy-state
+      target: /old
+      volume: {}
+    - type: volume
+      source: proxy-state-v2
+      target: /new
+      read_only: true
+      volume: {}
+  native-manifest-check:
+    image: vllm/vllm-openai@sha256:91ee972ab751fb7180bc71c175865e36b091686600dca783d52b2511399810b3
+    restart: 'no'
+    read_only: true
+    user: 65532:65532
+    network_mode: none
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    mem_limit: 512m
+    pids_limit: 32
+    depends_on:
+      model-measurer:
+        condition: service_completed_successfully
+        required: true
+    volumes:
+    - type: volume
+      source: cyberseek-v41-native-data
+      target: /native
+      read_only: true
+      volume: {}
+    - type: volume
+      source: model-evidence-state
+      target: /model-evidence
+      read_only: true
+      volume: {}
+    environment:
+      EXPECTED_MANIFEST_B64: ewogInZlcnNpb24iOiAxLAogImFsZ29yaXRobSI6ICJzaGEyNTYiLAogImZpbGVfY291bnQiOiA1NywKICJ0b3RhbF9ieXRlcyI6IDUxMDMxMDU4NDg1NCwKICJmaWxlcyI6IFsKICB7CiAgICJwYXRoIjogIi5naXRhdHRyaWJ1dGVzIiwKICAgInNoYTI1NiI6ICJlZDg3M2JiOWUxNDA4MGJlNjQ1ZjUxMWMxNmM5MGEzMDNlNjExMmQ5MmY4YThiNTBkNmJiYzYwZWVhZTQ1NDUzIiwKICAgInNpemUiOiAxNTk0CiAgfSwKICB7CiAgICJwYXRoIjogIkxJQ0VOU0UiLAogICAic2hhMjU2IjogImYyYzZjNjAyODE1NjY5ZDI5Mjg4OWU1YmU4YzgwMmYyZWQ5NTA2NTNiNzc5OTliMTU4NGU4ZTZhZWQyNWQwNDAiLAogICAic2l6ZSI6IDEwODQKICB9LAogIHsKICAgInBhdGgiOiAiUkVBRE1FLm1kIiwKICAgInNoYTI1NiI6ICJiNzJiNzk2ZTRmNGM3MzllY2E1ZDBhZDM2MGE3Njc5YjM5MTE4Y2E3ZWI2NDg5MWY3MTUxYTUyN2IyOTJjNDJhIiwKICAgInNpemUiOiA1MjMxCiAgfSwKICB7CiAgICJwYXRoIjogImFibGF0aW9uLXN0YXRlLmpzb24iLAogICAic2hhMjU2IjogIjJjMzkzNGZmOGQ0YWQ4YWQyNzY0Mjg4NTg3OGYxMGJmZTM4MGJiOTg5MzI3ZTczMTIxY2U4YmQ5ZDRmZTAwYWQiLAogICAic2l6ZSI6IDEwMjQ4CiAgfSwKICB7CiAgICJwYXRoIjogImNoYXRfdGVtcGxhdGUuamluamEiLAogICAic2hhMjU2IjogIjk1YjcwMzNhNjkzYjMyMWNlYWVmYjZmODlhZDA3ZDFlMGNmMmIwOTUzMDU3MTFmOTM0YTRhYzY0OTQ1NjczOWQiLAogICAic2l6ZSI6IDE2NzIyCiAgfSwKICB7CiAgICJwYXRoIjogImNvbmZpZy5qc29uIiwKICAgInNoYTI1NiI6ICI4YmU0NWNlMDQ3NjAwNGEzZjUyOWZkODk2MTE1YTRhMmU4MDBhMTI5YWQyZDNlYzA1YjE2MDUwZjUyZTIxODc5IiwKICAgInNpemUiOiAzMzExCiAgfSwKICB7CiAgICJwYXRoIjogIm1vZGVsLTAwMDAxLW9mLTAwMDQ4LnNhZmV0ZW5zb3JzIiwKICAgInNoYTI1NiI6ICIxM2JkMTIxMDc1ZjBiNjhjYjdlOGU4MDIxYTEwMTFkNDJhODFhODNmNTU3YTI2MDJmZDljMDdkNTJmZGRiMGVjIiwKICAgInNpemUiOiA5NzA1MzM2MjQKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMDItb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjQzNjE2ZWViZDg4ZGQ0ZjFmMWI2NDI3NzIzNTZmYzE2MDQ3OGQxZDlkMDRlZGQyNDA0MzFlN2QwNjVkMmVkYTciLAogICAic2l6ZSI6IDEzMjM4NTgyNzIKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMDMtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjc3NDQ3YjM0YjExNWM4ODFjYzAyMTE5ODY2N2RkNmU4NTJlNDgzMGFhM2MyMzczZjE0YWQ1MWRkOTVjOTM1NWEiLAogICAic2l6ZSI6IDczODk3NTkwMzIKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMDQtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogImVlMjVjNDdhM2JkZjAzZjBlNmZhOTgyNDRjNzRlYmY4NmE3ODRlYzg0Zjc4MTJhYmQ1NjE2ZGE4NmQwYTliNTEiLAogICAic2l6ZSI6IDczODk3NTkwMzIKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMDUtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjk5MWY3NzFhMDNmOTQ5ZGFiNjIxNjhjYWEwMGJkODU0YTE0Mzg5ZmVmZGY3YzUxYjc3NmU3YWJjYThhZjE2Y2QiLAogICAic2l6ZSI6IDc0MDU5NTM3ODQKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMDYtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjJlYWIyZTk5OTRmYThjOTZiMjM4NzNhNTJiYjhmNzg0NzAxMzUxZGQ4ZGUzZTFiMjg1NTQ3NmRhZmE1ZGNjMTIiLAogICAic2l6ZSI6IDczODk3NTkwMzIKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMDctb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogImM1Y2M1NmY3YjI5M2MwOGQ0ZjUxOTI2MzIxNGUxZTMxYzkzNjUxYTQyYmFmOGY3YmQ4Nzc0OTk3NDg2YzZhMTUiLAogICAic2l6ZSI6IDczODk3NTkwMzIKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMDgtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjA1YzcwMDI1MDUzNjNhZmUwOGRlM2JmMzM3ZmQ5NjE3ZDJkYTI1YTBlZDZkNjJhYTVmODMwODMwZTUyOTc4NmQiLAogICAic2l6ZSI6IDczODk3NTkwMzIKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMDktb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjk5ODNlMDBlOTAzZDY3MTFiZWZiOTViMTY0ZWYzOWEyZDFjMWYzYjBmMTRjZjZmNzA0MzAzZTEyNzBhNWIyOTAiLAogICAic2l6ZSI6IDczODk3NTkwMzIKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMTAtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjE2YWM4NTUwZjQzMzI3MmE3NTE5NDQ2OGJmYTVhYjA5ZjM5Yjk1ZWU2YTVmYmMyNWVhYzg0MTQyMmM1MGUwMjUiLAogICAic2l6ZSI6IDczODk3NTkwMzIKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMTEtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogImUwY2ZkMGRkZWMwZTczOGY4ZTc4OThlNDg4OTUxZTIzMjFmYjQyM2JhOWMxYmZhOWMxZjAzMDE1OGRiNjA0MGQiLAogICAic2l6ZSI6IDc0MDU5NTM3ODQKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMTItb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogImJiZjQ1NGIxZTNkOWUwNTI4NmY3NzQ0OGI4YzlkMjczMTdmYzQxMjE4MThkNDg3N2ZlMjE0YzNmNTk4ZDJkODIiLAogICAic2l6ZSI6IDczODk3NTkwMzIKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMTMtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjViODdjYzkwZWZmZGZkMGJkZWIwZDNmMmI1MTM2OTFlNmMzM2ZlMjQ3ZjYyMzJkODdlNDVhYjVjMzY4NGU1OGUiLAogICAic2l6ZSI6IDczODk3NjEzNjgKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMTQtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogImMxMjJjNGJkY2VkNWNiNDhlZDE1YmIxODQxNjZhMWExZWQ4MDUyMTA0ZWEzMGQ3MjRjYzRlOWU1YjFiNjdlY2IiLAogICAic2l6ZSI6IDczODk3NjEzNjgKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMTUtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjhkZjM2NWJmOTYyYWQxZTdlNjI4MjNjMzFiMzZmMjIyOTEwYWY4ODEwYmY2ZDg1YjQ5YTk2MTdjYmE4YWNlY2UiLAogICAic2l6ZSI6IDczODk3NjEzNjgKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMTYtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjZhZWU4ODQ1ZDgxNjFlN2I2ODUwNWUyYWIwN2ZhYWQwOTVjODEyYWUzODNlYzU5NGU1N2YzZjBjNDY0ODczZWYiLAogICAic2l6ZSI6IDczODk3NjEzNjgKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMTctb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjJjYTA0MDk2ZTAwNmUzODFjNmMxYjI4YTU4MGU0MjJhODBhMmQxNGM0NWU5MGE1OGNiMjU1YTY0MTYzMTQzZjIiLAogICAic2l6ZSI6IDc0MDU5NTYxMjgKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMTgtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogImVkMWM2MDc3ZGIxNzkxMTVlYzNmNDY5OWQ2NGY4MTVhMzdlYmVmOGIzZTM4YmZlNzBlYzIwMjIzN2Y2NzE0M2EiLAogICAic2l6ZSI6IDczODk3NjEzNjgKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMTktb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogImM4NDA3NzhkM2Q1M2UwNTIzMzY5MGM5ZGUzMDY0N2IxNGY0ZmNiYTg1YzRjYmE3NWJiOWM1MWNkMzhjY2FiMjYiLAogICAic2l6ZSI6IDczODk3NjEzNjgKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMjAtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogImY1NGM5Yzg4MTllY2YyMWRlNjcyNmEyMWMyY2EzMThkOGM2Nzk1MzQ5ODMyMjQ4NDI3MDkxMWYwZTdmNzRlYzAiLAogICAic2l6ZSI6IDczODk3NjEzNjgKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMjEtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjAxYmQzZTY0MGM4NGUzMzdmY2FjNDU3NGJhZmFlYzZmYTU1YWYxOTJkM2NjY2RjMTYwYTlmMDYzNzk5MjA4YjYiLAogICAic2l6ZSI6IDczODk3NjEzNjgKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMjItb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogImNlODg0NmQ5N2JiM2FmYmFiZWMyZmZhOGRiYjY0M2MwNDBjNWFlZTdhZjIxZTc4NjBjYTFiZGU5ZDJjNGZjYzciLAogICAic2l6ZSI6IDczODk3NjEzNjgKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMjMtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogImE3ZjlmOTIyNWM4MTNjYTlkODlmMjM0ODg5ZmQ0Yjk2MDc5YjkyYTgxYzdiMzk0YzYxMzM2YjMwOWMzZTMwMGQiLAogICAic2l6ZSI6IDc0MDA3MTMwODgKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMjQtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjkyOGQ5MmEzNGU4MGI3ZTJkMGUxNWQ0YTE5MjM3ZjU0ZTllMGQ3ZGU4MzE2MDc5YjFjZmU1ZGQyOGNjZjU1OGIiLAogICAic2l6ZSI6IDczODk3NjEzNjgKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMjUtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjcwMTcwMDFjOTNiNDIwYTJlNzFhMzZhYjg2YmEzZmFmOGIwN2JmOGE1NTkyYTJlMDBiMzU1NWIxNDJkMWQ1YzMiLAogICAic2l6ZSI6IDczODk3NjEzNjgKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMjYtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjVkNjAwOTY0ZDU0ZTBmYmEwY2NiOTI4NGI0ZWJmZTRlNjhlMDEzNWRjZDdiYjAzNDBkZTZmZTNlOTYzNGU2NDgiLAogICAic2l6ZSI6IDczODk3NjEzNjgKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMjctb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogImUyZmI3Nzk1OTc3NDk4OTZmZTAyYTQ3Yzk3NWEwNjJmNzVlMWM3ZTA3YjFiOWQxZjg0OTMxMWUwNGRkMDczNzQiLAogICAic2l6ZSI6IDczOTUzMzczODQKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMjgtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjVlYTlmNmM2ZmQ3MzYyNzg5OTQzZTEzZTFkZmZmOTczNDJmYThkMzAwZjhmYmU5ZjA3YmFiYmMyYzc2ZTQ2M2MiLAogICAic2l6ZSI6IDczODk3NjEzNjgKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMjktb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjU2MWI1YjA3OTQ2ZmQ0M2IzMTdlMDNhOGYzZDBiNzQ3ODViNWQxMDg4NWM3MDg0MmJlMjdlMDdiNDkwYjc3NzIiLAogICAic2l6ZSI6IDczODk3NjEzNjgKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMzAtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogImY3MmJiNGJjZDZiMGEwMTNhMWUzNGQ0NDk0M2FkNmU3MzFlMDFiZmRlNzExNjljZWJhYTJmNWEzZjI4NjgyYTQiLAogICAic2l6ZSI6IDczODk3NjEzNjgKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMzEtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogImZmZDhlYTRiOWQ3ODQwZjJhZTkzOTMzYTk2ODRmZmVkYzA5M2M4YmM3ZTJmMjUyNDAxMjA0MDkzMWFhNDliZmYiLAogICAic2l6ZSI6IDczOTUzMzczODQKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMzItb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjFkZjQ1MDQ1M2Q4ZjkyYmUxN2Q4YmMzNGJmYjhlMGM4NDFhOTU2YWE1ZjU1YTVhYjNmNGY5YzJiOWE2ZWE5NGQiLAogICAic2l6ZSI6IDczODk3NjEzNjgKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMzMtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogImFkNmM2N2M4NzM5OTM4NDRkYmJjZWM4NDhiODM4OWVhMmNhMWEwYWY1NzJkNDJkMDAwNmQ4NTk2NmIzYmY5NjYiLAogICAic2l6ZSI6IDczODk3NjEzNjgKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMzQtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjY4N2NkOGMyMGI1MGY2ZmY4NmIyZDhhZjc3YWM5MDliZWYyNmVkZDhmNGYwZGZkZjE2NGI0NDJlZTRmOGMxNGQiLAogICAic2l6ZSI6IDczODk3NjEzNjgKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMzUtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjNkMDE5YTY2OWU3NTkwODRhYTM5NDg2NTJkOGQ3NTU2ZjQ2ZjBiOTY2YTcxOTU4YTgwNGFlM2E1OTdiZDA2YzYiLAogICAic2l6ZSI6IDczOTUzMzczODQKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMzYtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjFiYTExYzg3Y2E1OGIyMTQ2YTdjNDM3YTdmMGNmZDkzODFkM2NkMDBmN2I5MWQyY2RmNGQ0NDM0NTg5OTg4YjkiLAogICAic2l6ZSI6IDczODk3NjEzNjgKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMzctb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogImVmMWQyYWY0OTVmYTIzZjJlMWI0NTA3MmIyODA5OTgwNTYwNzVjZjFiOTljYzczYTY5ZGMyMGFjMzQ5ZTk1MjkiLAogICAic2l6ZSI6IDczODk3NjEzNjgKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMzgtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogImI4YjE0YzU0YzU4YmU3MTc1M2ExNGFkZGIxOWI4Y2Y3OWZmMGFiN2E3Zjc0NmM3NThhNTI4OWY0MTcwMTJkMDUiLAogICAic2l6ZSI6IDczODk3NjEzNjgKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwMzktb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjRiOWQ4YzRiYTAwMjVlNGYxMTJkMDlmMjNjOWM0MTA2NDk1ZmI0YmNlMDVmYzU2YTgzOGRkOTJlZDkzYmFkZDQiLAogICAic2l6ZSI6IDczOTUzMzczODQKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwNDAtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjE0NzUzZWU0ZGY5ODgwZjM2MmNiMjE1OGExOWFjZDdiMGY5MDI3ZWZmMzVjZjVlMzY0Mzk0ZWRkNThiOGZlZGQiLAogICAic2l6ZSI6IDczODk3NjEzNjgKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwNDEtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjllNGU2YmE3OGViODMxMGJjNjNlMGVkYzMwMmQ2ZWNlZWFiNTFlNzYwYTZlNTA4NjhjZjdjY2I5N2JhMzQzNTgiLAogICAic2l6ZSI6IDczODk3NjEzNjgKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwNDItb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjcwYjBiY2ZkNzcwMjYzOWExYmQzOWRjY2YxOWZlM2EyMTVkNzgzMjRlNTA1MmJhNGU0ZWVjMTM3YmU5YmFlOWIiLAogICAic2l6ZSI6IDczODk3NjEzNjgKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwNDMtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjRhZTEyYjk0MWMzZmFjZjg2MTZjZTYyZGQ0NWJjNjg2ODA3NmMyYWViODIxMDZmOTgxMjNlYTZjNWJiNjQxODIiLAogICAic2l6ZSI6IDEzMjM4Mzc2MjQKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwNDQtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjNlOGFjMzE1YzJiY2NhM2U4M2M1ZTZlMjVjNTc1OGE3NWMwMzczMjA2M2E2ZmYwYzFiMGUyNGI5ZmY0OWY2ZTYiLAogICAic2l6ZSI6IDI2NTI3Mjg3MzYKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwNDUtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjljNzNiMjdjNDM0MzIzNjc5MDAwODk3OWQ1ZTBiNTY1ZjY4N2FhNjQ0NDAwMzFiOWUwOTZmZWQxYWI4MDM5YzUiLAogICAic2l6ZSI6IDI1NzM5OTgxNzYKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwNDYtb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjFkY2NjMTlhMzc0MTk3MmM2NjFkZTczNDU3MmRjN2Q0Yjg5OWU2ZTk5YmZiZGYzYWU0ZTA1N2M3MDdlNWIzMzkiLAogICAic2l6ZSI6IDI3MDY0MDI4OTYKICB9LAogIHsKICAgInBhdGgiOiAibW9kZWwtMDAwNDctb2YtMDAwNDguc2FmZXRlbnNvcnMiLAogICAic2hhMjU2IjogIjc2YTA1MTA2ZWNlMjU5YmU4M2QxYmZlYTBkY2I1NGYyMzM3Nzg2NGVlNjBmZDMyMTY5MGYzNWU2Njk4YTJhZjUiLAogICAic2l6ZSI6IDEwMTUzNTE1MDkzNgogIH0sCiAgewogICAicGF0aCI6ICJtb2RlbC0wMDA0OC1vZi0wMDA0OC5zYWZldGVuc29ycyIsCiAgICJzaGEyNTYiOiAiOWRjNTE0MzNlMTk1YmM3OGI1YWQ4NDZiNjg2NDNjYzAzNTFkM2IxNzRlNWU0MzA5MjIyZDNiNzQwMmM4M2FmZCIsCiAgICJzaXplIjogMTAxNTM3OTI2NjQwCiAgfSwKICB7CiAgICJwYXRoIjogIm1vZGVsLnNhZmV0ZW5zb3JzLmluZGV4Lmpzb24iLAogICAic2hhMjU2IjogIjc0YjA2ODZhM2QyODkxOTgwZDVlMzAzMjUxYjA3NWEzYmNjYWUyYzJmZjY1MDc0N2RiMjYyMGE2NDliOThmYTgiLAogICAic2l6ZSI6IDc0NzAyOTQKICB9LAogIHsKICAgInBhdGgiOiAidG9rZW5pemVyLmpzb24iLAogICAic2hhMjU2IjogImM5MGRmYTAxMjQ5ZGIxYmU0MjQ1NzgwYTA1MmVkZTc1MmUxMzYxYzYxMmFjNmQwOGUyYmRhZGE3ZDU5OTQ3NmIiLAogICAic2l6ZSI6IDYzNjcyNTcKICB9LAogIHsKICAgInBhdGgiOiAidG9rZW5pemVyX2NvbmZpZy5qc29uIiwKICAgInNoYTI1NiI6ICI2YWM4YzhkYzA2NWVkMTE4MTYxZDAyZGQ1MzI3NDlhZTNmNTJjMjQzZGVhYzI3ODcyMTM0ZmFlMmY1MGQ4NTQ3IiwKICAgInNpemUiOiA4MDEKICB9CiBdCn0K
+    entrypoint:
+    - python3
+    - -B
+    - -c
+    command:
+    - "import base64,json,os\nexpected=json.loads(base64.b64decode(os.environ['EXPECTED_MANIFEST_B64']))\nmeasured=json.load(open('/model-evidence/native-manifest.json'))\nexp={f['path']:(f['size'],f['sha256']) for f in expected['files']}\ngot={f['path']:(f['size'],f['sha256']) for f in measured.get('files',[])}\nassert len(got)==len(exp) and all(got.get(k)==v for k,v in exp.items()), 'measured model payload differs from reviewed build manifest'\nprint(json.dumps({'native_manifest_verified': True, 'files': len(exp)}), flush=True)"
+networks:
+  default:
+    name: dstack_default
+  inference:
+    name: dstack_inference
+    internal: true
+volumes:
+  gpu-evidence-state:
+    name: dstack_gpu-evidence-state
+  model-evidence-state:
+    name: dstack_model-evidence-state
+  proxy-state:
+    name: dstack_proxy-state
+  proxy-state-v2:
+    name: dstack_proxy-state-v2
+  inference-handoff:
+    name: dstack_inference-handoff
+  inference-status:
+    name: dstack_inference-status
+  cyberseek-v41-native-data: {}
+  sglang-cache-state: {}

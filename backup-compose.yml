@@ -1,3 +1,6 @@
+# HISTORICAL — a completed one-time backup job for the CyberGLM model, which is no longer
+# served. Not part of the deployed composition (see deployed/README.md).
+#
 # One-time private CyberGLM artifact backup. This is intentionally separate
 # from the final confidential-inference compose: it preserves the currently
 # recovered serving configuration and adds only a constrained uploader.

@@ -1,72 +1,83 @@
 # Adverserial AI confidential infrastructure
 
-Public architecture, policy templates, and deployment-validation material for
-Adverserial AI confidential inference. It contains no production credentials,
-private addresses, customer data, or model weights.
+Deployment documentation for Adverserial AI confidential inference. It contains
+no production credentials, customer data or model weights.
 
-Read [ARCHITECTURE.md](ARCHITECTURE.md) for the end-to-end diagram, trust
-boundaries, TLS termination point, billing data contract, and evidence needed
-before production verification is enabled.
+## What is deployed
 
-The repository documents a target design. It must not be used to claim that an
-endpoint is verified until a client independently validates fresh hardware
-evidence against an active signed policy.
+The composition that runs in production is in
+[`deployed/`](deployed/README.md): the exact Docker Compose file, an
+explanation of every service, and how its hashes are computed. In short:
 
-## CVM deployment preparation
+- One Intel TDX confidential VM on Phala Cloud (dstack), OS image
+  `dstack-nvidia-0.5.15`, with 8× NVIDIA H200 in confidential mode.
+- `https://api.adverserial.ai` is a CNAME to a Phala gateway that passes TLS
+  bytes through. TLS terminates in
+  [`attest-proxy`](https://github.com/AdverserialAI/attest-proxy)
+  (`v0.1.0-rc.33`) inside the VM.
+- The model server is SGLang serving `adverserial/cyberseek`. It sits on an
+  internal Docker network with no published port and accepts only requests
+  carrying a token generated inside the VM at each boot.
+- Every private key of the service (receipt, meter, HPKE/EHBP, TLS) is
+  generated inside the VM. This has been the case since proxy `v0.1.0-rc.31`;
+  earlier releases used operator-generated seeds passed in as sealed
+  configuration.
+- Usage records are signed in the VM and posted directly to
+  `https://billing.adverserial.ai`. They contain token counts, not prompts or
+  completions.
 
-`docker-compose.yml` is intentionally a **render-only template**. It has no
-deployable defaults: it requires immutable proxy, GPU-collector, and model-measurer image
-digests, sealed credentials, a published policy identifier, and a measured
-runtime digest. The model digest is generated from the read-only model volume
-inside the CVM before attest-proxy starts. The template does not host `chat`; the static
-browser app is external and connects directly to `api` after verification.
+Status: rolled out 2026-11-24; policy update pending first live attestation.
+The policy clients verify against is published at
+<https://verify.adverserial.ai/policies/production.json>. This repository is
+not a source of runtime trust and does not by itself show that an endpoint is
+verified: a client must check fresh hardware evidence against the published
+policy.
 
-Before any CVM change, create an untracked sealed-values file from
-`.env.example` and run:
+## What in this repository is history
 
-```sh
-ENV_FILE=/secure/path/cc-api.env bash scripts/prepare-deployment.sh
-```
+Everything outside `deployed/` was written for the first activation in October
+2026 (model `lordx64/cyberglm`, proxy release candidates up to `rc.24`) and no
+longer matches production. It is kept for the record and is marked as
+historical in each file:
 
-Set the printed `deployment_configuration_digest` as `COMPOSE_DIGEST` in the same sealed file and render again before using the guarded update. `SGLANG_MAX_RUNNING_REQUESTS` is a dedicated 1–8 admission cap for this profile; do not put it, or any routing/authentication/model identity flag, in `SGLANG_MODEL_OPTIONS`.
+| Path | What it was | Why it no longer applies |
+| --- | --- | --- |
+| [`docker-compose.yml`](docker-compose.yml) | Render-only template for the CyberGLM deployment | Model server shared the proxy's network namespace on loopback; receipt seed, meter seed, EHBP identity and the proxy-to-model token were operator-supplied sealed values. The current proxy refuses all four. |
+| [`.env.example`](.env.example), [`profiles/`](profiles/README.md) | Variable set for that template | Pins `rc.24` images and the CyberGLM model; lists the removed seed variables. The placeholders are not secrets. |
+| [`CVM_CONFIGURATION.md`](CVM_CONFIGURATION.md) | Activation checklist | Names the old OS image (`dstack-nvidia-0.5.9`), the old gateway hostname and workstation key generation. |
+| [`scripts/generate-confidential-key-material.py`](scripts/generate-confidential-key-material.py) | Workstation generator for the meter seed and proxy-to-model token | Those values are now generated inside the VM. Billing's entitlement signing key is still generated outside the VM, by billing. |
+| [`scripts/generate-meter-mtls-material.py`](scripts/generate-meter-mtls-material.py) | Certificates for the optional mTLS meter ingress | Production uses direct signed delivery; the ingress is not deployed in that path. |
+| [`scripts/prepare-deployment.sh`](scripts/prepare-deployment.sh), [`scripts/final-cvm-update.sh`](scripts/final-cvm-update.sh) | Preflight and guarded update for the template | They render the historical template. CI still runs the preflight tests so the scripts keep working as written. |
+| [`backup-compose.yml`](backup-compose.yml), [`backup/`](backup/) | One-time upload of the CyberGLM model artifact | A completed one-off job for a model that is no longer served. |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md), [`INDEX.md`](INDEX.md) | Architecture and component index | Updated to the current design; see the notes in each file. |
 
-This validates required values, refuses mutable or mismatched runtime images,
-blocks profile flags that could override loopback authentication, model
-identity, routing, or the admission limit, and writes
-`dist/docker-compose.rendered.yml` for review. It fingerprints every sealed
-value in the emitted deployment digest without writing those values to the
-review artifact. It does **not** contact Phala, dstack, a GPU, Cloudflare,
-billing, or production DNS.
+Neither the template nor the example files contain a secret: sealed values are
+`${VAR}` references or `SECRET_REPLACE_…` placeholders.
 
-The only pre-existing CVM volume is the existing Compose-managed logical volume
-(`cyberglm-data`). Compose resolves its historical project-prefixed Docker name
-and mounts it read-only into SGLang as `/data`. Docker creates two private named
-volumes on the final deployment: `proxy-state` for ACME/replay/outbox state and
-a separate `gpu-evidence-state` for collector output. The proxy image
-pre-creates its state directory with UID/GID `65532`, and the collector image
-pre-creates its evidence directory with the same ownership. The collector can
-write evidence but cannot read meter credentials, replay state, ACME state, or
-model weights.
+## What these documents do not claim
 
-The production H200 profile uses outbound **direct-signed** count-only metering. The proxy sends an Ed25519-signed meter record over TLS 1.3 to a fixed billing origin. Billing requires a dedicated sealed meter capability and verifies the JWS before settlement. This channel never carries prompts, completions, customer API keys, or entitlements. A separately deployed mTLS meter ingress remains an optional stronger network boundary for a future deployment.
+- **Reproducible builds.** Images are pinned by digest, and the proxy, GPU
+  evidence collector and model measurer are built by GitHub Actions with build
+  provenance and an SBOM. Nobody has shown that rebuilding the source yields
+  the same image digest, so this repository does not claim it.
+- **A signed policy.** The published policy is distributed over HTTPS from
+  `verify.adverserial.ai` and says so itself (`detached_policy_signature:
+  false`). Receipts are signed; the policy document is not.
+- **mTLS metering.** Usage records go straight from the proxy to billing over
+  TLS with an Ed25519 signature and a shared capability.
+  [confidential-meter-ingress](https://github.com/AdverserialAI/confidential-meter-ingress)
+  is an optional alternative that production does not use.
 
-SGLang
-shares the proxy network namespace and binds only `127.0.0.1:30000`; it also
-requires a distinct sealed loopback token. Customer API keys terminate at
-billing and the CVM receives only one-use billing entitlements.
+## Related repositories
 
-`METER_SIGNING_SEED`, `SGLANG_LOOPBACK_TOKEN`, and `CLOUDFLARE_API_TOKEN` are sealed
-values. `ENTITLEMENT_JWKS_JSON` is public key material, but is included in the
-sealed deployment set to keep the rendered compose self-contained. A
-subsequent real attestation/measurement step is required before publishing a
-policy or enabling clients; do not set a production endpoint to verified
-before that evidence is independently validated.
-
-The proxy, collector, and model-measurer release workflows build digest-pinned
-images with GitHub provenance and SBOM artifacts. The measurer has a read-only
-model mount and a write-only manifest volume; it has no network endpoint,
-credentials, or proxy state access. Copy the resulting immutable GHCR
-digests into the sealed values file; never use a mutable tag in the compose.
+| Component | Where |
+| --- | --- |
+| Proxy, GPU evidence collector, model measurer | <https://github.com/AdverserialAI/attest-proxy> |
+| Published policy and release manifests | <https://verify.adverserial.ai> ([confidential-policy](https://github.com/AdverserialAI/confidential-policy) holds older templates only) |
+| Chat client | <https://chat.adverserial.ai>, built from [confidential-open-webui](https://github.com/AdverserialAI/confidential-open-webui) |
+| Command-line client | <https://github.com/AdverserialAI/adverserial-confidential-kit> |
+| SDK source | <https://github.com/AdverserialAI/confidential-sdk> |
+| Independent verifier and attestation history | `AdverserialAI/cyberseek-transparency` (being published) |
 
 ## Security
 
